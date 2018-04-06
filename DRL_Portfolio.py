@@ -64,7 +64,6 @@ class DRL_Portfolio(object):
             self.reward_t = tf.reduce_sum(self.z * self.action[:-1] - self.c * tf.abs(self.action[1:] - self.action[:-1]), axis=1)
             self.cum_reward = tf.reduce_prod(self.reward_t)
             self.log_reward = tf.reduce_sum(tf.log(self.reward_t))
-            # self.epoch_train_reward=tf.Variable(1,dtype=)
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
             self.train_op = optimizer.minimize(-self.log_reward)
