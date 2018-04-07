@@ -40,7 +40,7 @@ class DRL_Portfolio(object):
         self.output_rnn_init_state = tf.placeholder(tf.float32, [1, asset_number], name='rnn_output_initial_state')
         self._state_per_layer_list = tf.unstack(self.hidden_rnn_init_state, axis=0) + [self.output_rnn_init_state]
         self.rnn_tuple_state = tuple(self._state_per_layer_list)
-        self.last_rnn_output = tf.placeholder(dtype=tf.float32, shape=[1, asset_number], name='previous_rnn_output')
+        self.previous_rnn_output = tf.placeholder(dtype=tf.float32, shape=[1, asset_number], name='previous_rnn_output')
         
         with tf.variable_scope('feed_forward', initializer=tf.contrib.layers.xavier_initializer(uniform=False), regularizer=tf.contrib.layers.l2_regularizer(0.01)):
             self.dense_output = self._add_dense_layer(inputs=self.f, output_shape=dense_units_list[0], drop_keep_prob=self.dropout_keep_prob)
@@ -56,7 +56,7 @@ class DRL_Portfolio(object):
             rnn_input = tf.expand_dims(self.dense_output, axis=0)
             self.rnn_outputs, self.current_state = tf.nn.dynamic_rnn(layered_cell, initial_state=self.rnn_tuple_state, inputs=rnn_input)
             self.current_output = tf.reshape(self.rnn_outputs[0][-1], shape=[1, asset_number])
-            self.rnn_outputs = tf.concat((self.last_rnn_output, tf.unstack(self.rnn_outputs, axis=0)[0]), axis=0)
+            self.rnn_outputs = tf.concat((self.previous_rnn_output, tf.unstack(self.rnn_outputs, axis=0)[0]), axis=0)
         with tf.variable_scope('action'):
             self.action = tf.nn.softmax(self.rnn_outputs)
         
@@ -95,7 +95,7 @@ class DRL_Portfolio(object):
             self.dropout_keep_prob: keep_prob,
             self.hidden_rnn_init_state: rnn_hidden_init_state,
             self.output_rnn_init_state: output_hidden_init_state,
-            self.last_rnn_output: initial_output,
+            self.previous_rnn_output: initial_output,
             self.c: fee
         }
     
