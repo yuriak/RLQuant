@@ -30,7 +30,7 @@ Model interpretation:
 '''
 
 
-class DRL_Single(object):
+class DRL_PairsTrading(object):
     def __init__(self, feature_number, dense_units_list=[1024, 768, 512, 256], rnn_hidden_layer_number=4, rnn_hidden_units_number=128, learning_rate=0.001):
         tf.reset_default_graph()
         self.f = tf.placeholder(dtype=tf.float32, shape=[None, feature_number], name='environment_features')
@@ -59,8 +59,10 @@ class DRL_Single(object):
         with tf.variable_scope('action', initializer=tf.contrib.layers.xavier_initializer(uniform=False), regularizer=tf.contrib.layers.l2_regularizer(0.01)):
             self.action = tf.contrib.layers.fully_connected(num_outputs=1, inputs=self.rnn_outputs, activation_fn=tf.tanh)
         with tf.variable_scope('reward'):
-            self.reward_t = self.z * self.action[:-1] - self.c * tf.abs(self.action[1:] - self.action[:-1])
-            self.cum_reward = tf.reduce_sum(self.reward_t)
+            self.log_reward_t = tf.log(self.z) * self.action[:-1] - self.c * tf.abs(self.action[1:] - self.action[:-1])
+            self.cum_log_reward = tf.reduce_sum(self.log_reward_t)
+            self.reward_t = tf.exp(self.log_reward_t)
+            self.cum_reward = tf.reduce_prod(self.reward_t)
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
             self.train_op = optimizer.minimize(-self.cum_reward)
@@ -106,5 +108,5 @@ class DRL_Single(object):
         self.saver.save(self.session, model_file)
     
     def trade(self, feed):
-        rewards, cum_reward, actions, current_state, current_rnn_output = self.session.run([self.reward_t, self.cum_reward, self.action, self.current_state, self.current_output], feed_dict=feed)
+        rewards, cum_reward, actions, current_state, current_rnn_output = self.session.run([self.log_reward_t, self.cum_log_reward, self.action, self.current_state, self.current_output], feed_dict=feed)
         return rewards, cum_reward, actions, current_state, current_rnn_output
