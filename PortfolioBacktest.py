@@ -45,11 +45,13 @@ def batch_nomorlize(f_data):
     keep_original = f_data.columns[list(f_data.columns.map(lambda x: '_' not in x))]
     return z_score(f_data[need_normalize]).join(f_data[keep_original])
 
+
 def initialize(context):
     #     set_benchmark(symbol('SPY'))
     model.init_model()
     context.i = 0
-    context.assets = list(map(lambda x:symbol(x), high_cap_company.Symbol.values))
+    # context.assets = list(map(lambda x: symbol(x), high_cap_company.Symbol.values))
+    context.assets = list(map(lambda x: symbol(x), ['AAPL', 'AMZN', 'GOOGL', 'MSFT']))
     context.model_fee = 1e-3
     context.previous_predict_reward = 0
     context.previous_action = 0
@@ -61,14 +63,16 @@ def initialize(context):
 
 
 def before_trading_start(context, data):
-    assets_history = data.history(context.assets, ['price','volume'], bar_count=context.sequence_length, frequency='1d')[:-1]
-    symbols=assets_history['price'].columns.map(lambda x: x.symbol)
-    prices= assets_history['price']
-    volumes=np.log(assets_history['volume'])
-    full_features=pd.concat(tuple([generate_tech_data(prices[c]) for c in symbols]), axis=1)
-    return_rate=(prices/prices.shift(1))[full_features.index[0]:]
-    log_return_rate=np.log(return_rate)
-    f_data = full_features.join(log_return_rate)
+    assets_history = data.history(context.assets, ['price', 'volume'], bar_count=context.sequence_length, frequency='1d')
+    symbols = assets_history['price'].columns.map(lambda x: x.symbol)
+    prices = assets_history['price'][:-1]
+    prices=prices.rename(columns=lambda x:x.symbol)
+    volumes = np.log(assets_history['volume'])[:-1]
+    volumes = volumes.rename(columns=lambda x: x.symbol + '_log_volume')
+    full_features = pd.concat(tuple([generate_tech_data(prices[c]) for c in symbols]), axis=1)
+    return_rate = (prices / prices.shift(1))[full_features.index[0]:]
+    log_return_rate = np.log(return_rate)
+    f_data = full_features.join(log_return_rate).join(volumes)
     z_data = return_rate.join(pd.Series(np.ones((f_data.shape[0])) * 1.0001, index=f_data.index, name='ASSET'))[f_data.index[0]:]
     hidden_initial_state, current_rnn_output = model.get_rnn_zero_state()
     feed = model.build_feed_dict(batch_F=batch_nomorlize(f_data),
@@ -81,16 +85,16 @@ def before_trading_start(context, data):
     rewards, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = model.trade(feed)
     while cum_reward < 0.5:
         model.train(feed=feed)
-        rewards, cum_reward, actions, current_state, current_rnn_output = model.trade(feed)
+        rewards, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = model.trade(feed)
     context.today_action = actions[-1].flatten()
+
 
 def handle_data(context, data):
     # trading_date = data.history(context.assets, ['close'], bar_count=1, frequency='1d').index[0].date()
-    trading_date=context.get_datetime().date
+    trading_date = context.get_datetime().date
     context.i += 1
-    record(action=context.today_action)
     action = context.today_action.flatten()[:-1]
-    for k,asset in enumerate(context.assets):
+    for k, asset in enumerate(context.assets):
         order_target_percent(asset, action[k])
     if context.i % 100 == 0:
         print(trading_date)
@@ -109,9 +113,9 @@ if __name__ == '__main__':
     sp500 = pd.read_csv('sp500.csv')
     sp500.index = sp500['Symbol']
     high_cap_company = sp500.loc[list(itertools.chain.from_iterable(list(map(lambda x: x[1][-3:], list(sp500.sort_values('Market Cap').groupby('Sector').groups.items())))))]
-    model = DRL_Portfolio(feature_number=len(high_cap_company)*7,asset_number=len(high_cap_company)+1)
+    model = DRL_Portfolio(feature_number=4 * 8, asset_number=4 + 1)
     
-    start = pd.Timestamp(pd.to_datetime('2004-02-08')).tz_localize('US/Eastern')
+    start = pd.Timestamp(pd.to_datetime('2002-02-08')).tz_localize('US/Eastern')
     end = pd.Timestamp(pd.to_datetime('2018-03-27')).tz_localize('US/Eastern')
     result = zipline.run_algorithm(start=start, end=end,
                                    initialize=initialize,

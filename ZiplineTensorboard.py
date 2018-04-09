@@ -1,5 +1,6 @@
 import datetime
 import tensorflow as tf
+import numpy as np
 
 """
 This code was from: https://github.com/jimgoo/zipline-tensorboard
@@ -40,6 +41,7 @@ class TensorBoard(object):
             logs: A dict containing what we want to log to TensorBoard.
         """
         for name, value in logs.items():
+            if type(value) is not np.ndarray: continue
             summary = tf.Summary()
             summary_value = summary.value.add()
             summary_value.simple_value = value
@@ -84,6 +86,8 @@ class TensorBoard(object):
         
         # add any extras passed in through `other_logs` dictionary
         for name, value in other_logs.items():
+            if type(value) is not np.ndarray:
+                continue
             logs[name] = value
         
         self.log_dict(epoch, logs)
