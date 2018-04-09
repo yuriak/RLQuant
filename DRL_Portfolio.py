@@ -62,11 +62,14 @@ class DRL_Portfolio(object):
         
         with tf.variable_scope('reward'):
             self.reward_t = tf.reduce_sum(self.z * self.action[:-1] - self.c * tf.abs(self.action[1:] - self.action[:-1]), axis=1)
+            self.log_reward_t=tf.log(self.reward_t)
             self.cum_reward = tf.reduce_prod(self.reward_t)
-            self.log_reward = tf.reduce_sum(tf.log(self.reward_t))
+            self.cum_log_reward = tf.reduce_sum(self.log_reward_t)
+            self.sortino = self._sortino_ratio(self.log_reward_t, 0)
+            self.sharpe = self._sortino_ratio(self.log_reward_t, 0)
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-            self.train_op = optimizer.minimize(-self.log_reward)
+            self.train_op = optimizer.minimize(-self.sortino)
         self.init_op = tf.global_variables_initializer()
         self.saver = tf.train.Saver()
         self.session = tf.Session()
@@ -84,6 +87,20 @@ class DRL_Portfolio(object):
         output = tf.contrib.layers.fully_connected(activation_fn=act, num_outputs=output_shape, inputs=inputs)
         output = tf.nn.dropout(output, drop_keep_prob)
         return output
+    
+    def _sortino_ratio(self,r,rf):
+        mean, var = tf.nn.moments(r, axes=[0])
+        sign = tf.sign(-tf.sign(r-rf) + 1)
+        number = tf.reduce_sum(sign)
+        lower = sign * r
+        square_sum = tf.reduce_sum(tf.pow(lower, 2))
+        sortino_var = tf.sqrt(square_sum / number)
+        sortino = (mean-rf) / sortino_var
+        return sortino
+    
+    def _sharpe_ratio(self,r,rf):
+        mean, var = tf.nn.moments(r-rf, axes=[0])
+        return mean/var
     
     def _add_gru_cell(self, units_number):
         return tf.contrib.rnn.GRUCell(num_units=units_number)
@@ -112,7 +129,7 @@ class DRL_Portfolio(object):
         self.saver.save(self.session,model_file)
     
     def trade(self, feed):
-        rewards, cum_reward, actions, current_state, current_rnn_output = self.session.run([self.reward_t, self.cum_reward, self.action, self.current_state, self.current_output], feed_dict=feed)
+        rewards, cum_reward, actions, current_state, current_rnn_output = self.session.run([self.reward_t, self.cum_log_reward, self.action, self.current_state, self.current_output], feed_dict=feed)
         hidden_current_states = np.array(current_state[:-1])
         output_current_state = current_state[-1]
         return rewards, cum_reward, actions, hidden_current_states, output_current_state, current_rnn_output

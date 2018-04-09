@@ -63,9 +63,11 @@ class DRL_PairsTrading(object):
             self.cum_log_reward = tf.reduce_sum(self.log_reward_t)
             self.reward_t = tf.exp(self.log_reward_t)
             self.cum_reward = tf.reduce_prod(self.reward_t)
+            self.sortino = self._sortino_ratio(self.log_reward_t, 0)
+            self.sharpe = self._sortino_ratio(self.log_reward_t, 0)
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-            self.train_op = optimizer.minimize(-self.cum_reward)
+            self.train_op = optimizer.minimize(-self.sortino)
         self.init_op = tf.global_variables_initializer()
         self.saver = tf.train.Saver()
         self.session = tf.Session()
@@ -76,6 +78,20 @@ class DRL_PairsTrading(object):
     def get_rnn_zero_state(self):
         zero_states = self.session.run([self.zero_state])[0]
         return zero_states
+
+    def _sortino_ratio(self, r, rf):
+        mean, var = tf.nn.moments(r, axes=[0])
+        sign = tf.sign(-tf.sign(r - rf) + 1)
+        number = tf.reduce_sum(sign)
+        lower = sign * r
+        square_sum = tf.reduce_sum(tf.pow(lower, 2))
+        sortino_var = tf.sqrt(square_sum / number)
+        sortino = (mean - rf) / sortino_var
+        return sortino
+
+    def _sharpe_ratio(self, r, rf):
+        mean, var = tf.nn.moments(r - rf, axes=[0])
+        return mean / var
     
     def _add_dense_layer(self, inputs, output_shape, drop_keep_prob, act=tf.nn.tanh):
         output = tf.contrib.layers.fully_connected(activation_fn=act, num_outputs=output_shape, inputs=inputs)
