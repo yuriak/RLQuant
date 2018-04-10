@@ -30,7 +30,7 @@ Model interpretation:
 '''
 
 class DRL_Portfolio(object):
-    def __init__(self, feature_number, asset_number, dense_units_list=[1024, 768, 512, 256, 128], rnn_hidden_layer_number=4, rnn_hidden_units_number=128, learning_rate=0.001):
+    def __init__(self, feature_number, asset_number,object_function= 'sortino',  dense_units_list=[1024, 768, 512, 256, 128], rnn_hidden_layer_number=4, rnn_hidden_units_number=128, learning_rate=0.001):
         tf.reset_default_graph()
         self.f = tf.placeholder(dtype=tf.float32, shape=[None, feature_number], name='environment_features')
         self.z = tf.placeholder(dtype=tf.float32, shape=[None, asset_number], name='environment_return')
@@ -69,7 +69,12 @@ class DRL_Portfolio(object):
             self.sharpe = self._sortino_ratio(self.log_reward_t, 0)
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-            self.train_op = optimizer.minimize(-self.sortino)
+            if object_function == 'reward':
+                self.train_op=optimizer.minimize(-self.cum_log_reward)
+            elif object_function == 'sharpe':
+                self.train_op = optimizer.minimize(-self.sharpe)
+            else:
+                self.train_op = optimizer.minimize(-self.sortino)
         self.init_op = tf.global_variables_initializer()
         self.saver = tf.train.Saver()
         self.session = tf.Session()

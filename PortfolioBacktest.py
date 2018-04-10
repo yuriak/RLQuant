@@ -1,6 +1,7 @@
 # -*- coding:utf-8 -*-
 import pandas as pd
 import zipline
+import quandl
 from DRL_Portfolio import DRL_Portfolio
 import logbook
 import talib
@@ -12,6 +13,7 @@ import os
 
 from zipline.api import order_target, record, symbol, order_target_percent, set_benchmark, order_target
 from zipline.finance import commission, slippage
+from zipline.data import bundles
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -23,6 +25,7 @@ zipline_logging = logbook.NestedSetup([
 zipline_logging.push_application()
 from ZiplineTensorboard import TensorBoard
 
+quandl.ApiConfig.api_key = 'CTq2aKvtCkPPgR4L_NFs'
 
 def generate_tech_data(stock):
     price = stock.values
@@ -47,11 +50,9 @@ def batch_nomorlize(f_data):
 
 
 def initialize(context):
-    #     set_benchmark(symbol('SPY'))
-    model.init_model()
     context.i = 0
-    # context.assets = list(map(lambda x: symbol(x), high_cap_company.Symbol.values))
-    context.assets = list(map(lambda x: symbol(x), ['AAPL', 'AMZN', 'GOOGL', 'MSFT']))
+    context.assets = list(map(lambda x: symbol(x), high_cap_company.Symbol.values))
+    print(context.assets, len(context.assets))
     context.model_fee = 1e-3
     context.previous_predict_reward = 0
     context.previous_action = 0
@@ -60,38 +61,87 @@ def initialize(context):
     context.sequence_length = 300
     context.tb_log_dir = './log/backtest'
     context.tensorboard = TensorBoard(log_dir=context.tb_log_dir)
+    
+    bundle = bundles.load('quandl')
+    start_date_str = str(context.get_datetime().date())
+    initial_history_start_date = bundle.equity_daily_bar_reader.sessions[bundle.equity_daily_bar_reader.sessions < start_date_str][(-context.sequence_length-1)]
+    initial_history_end_date= bundle.equity_daily_bar_reader.sessions[bundle.equity_daily_bar_reader.sessions > start_date_str][0]
+    filterd_assets_index=(np.isnan(np.sum(bundle.equity_daily_bar_reader.load_raw_arrays(columns=['close'], start_date=initial_history_start_date, end_date=initial_history_end_date, assets=context.assets), axis=1)).flatten()==False)
+    context.assets=list(np.array(context.assets)[filterd_assets_index])
+    print(context.assets, len(context.assets))
+    remain_symbols=list(map(lambda x:x.symbol,context.assets))
+    if not os.path.exists('history_data'):
+        print('Start to download good history data')
+        history_data = {}
+        for s in remain_symbols:
+            print('downloading',s)
+            stock = quandl.get_table('WIKI/PRICES', date={'gte': str(initial_history_start_date)}, ticker=s)
+            stock.index = stock.date
+            history_data[s] = stock
+        history_data = pd.Panel(history_data)
+        history_data=history_data.transpose(2,1,0)
+        history_data.to_pickle('history_data')
+        context.history_data=history_data
+        print('Done')
+    else:
+        print('history data exist')
+        history_data=pd.read_pickle('history_data')
+        context.history_data=history_data
+    if not os.path.exists('vix.csv'):
+        print('Start to download VIX index')
+        vix=quandl.get("CHRIS/CBOE_VX1", authtoken="CTq2aKvtCkPPgR4L_NFs")
+        vix=vix[str(initial_history_start_date):]
+        vix.to_csv('vix.csv')
+    if not os.path.exists('si.csv'):
+        print('Start to download silver price')
+        si = quandl.get("CHRIS/CME_SI1", authtoken="CTq2aKvtCkPPgR4L_NFs")
+        si.to_csv('si.csv')
+    if not os.path.exists('gc.csv'):
+        print('Start to download gold price')
+        gc = quandl.get("CHRIS/CME_GC1", authtoken="CTq2aKvtCkPPgR4L_NFs")
+        gc.to_csv('gc.csv')
+    if not os.path.exists('spy.csv'):
+        print('Start to download SP500 Index')
+        spy=quandl.get("CHRIS/CME_SP1", authtoken="CTq2aKvtCkPPgR4L_NFs")
+        spy.to_csv('spy.csv')
+    
+    context.model = DRL_Portfolio(feature_number=len(context.assets) * 8, asset_number=len(context.assets) + 1,object_function='sortino')
+    context.model.init_model()
 
 
 def before_trading_start(context, data):
-    assets_history = data.history(context.assets, ['price', 'volume'], bar_count=context.sequence_length, frequency='1d')
-    symbols = assets_history['price'].columns.map(lambda x: x.symbol)
-    prices = assets_history['price'][:-1]
-    prices=prices.rename(columns=lambda x:x.symbol)
-    volumes = np.log(assets_history['volume'])[:-1]
-    volumes = volumes.rename(columns=lambda x: x.symbol + '_log_volume')
-    full_features = pd.concat(tuple([generate_tech_data(prices[c]) for c in symbols]), axis=1)
+    trading_date = context.get_datetime().date()
+    prices=context.history_data['adj_close'][:str(trading_date)][:-1]
+    volumes=context.history_data['adj_volume'][:str(trading_date)][:-1]
+    prices=prices.fillna(1)
+    volumes=volumes.fillna(1)
+    symbols=list(prices.columns)
+    volumes = np.log(volumes)
+    volumes = volumes.rename(columns=lambda x: x + '_log_volume')
+    full_features = pd.concat(tuple([generate_tech_data(prices[c].astype(float)) for c in symbols]), axis=1)
     return_rate = (prices / prices.shift(1))[full_features.index[0]:]
     log_return_rate = np.log(return_rate)
     f_data = full_features.join(log_return_rate).join(volumes)
     z_data = return_rate.join(pd.Series(np.ones((f_data.shape[0])) * 1.0001, index=f_data.index, name='ASSET'))[f_data.index[0]:]
-    hidden_initial_state, current_rnn_output = model.get_rnn_zero_state()
-    feed = model.build_feed_dict(batch_F=batch_nomorlize(f_data),
+    hidden_initial_state, current_rnn_output = context.model.get_rnn_zero_state()
+    feed = context.model.build_feed_dict(batch_F=batch_nomorlize(f_data),
                                  batch_Z=z_data,
                                  keep_prob=0.8,
                                  fee=context.model_fee,
                                  rnn_hidden_init_state=hidden_initial_state,
                                  output_hidden_init_state=current_rnn_output,
                                  initial_output=current_rnn_output)
-    rewards, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = model.trade(feed)
-    while cum_reward < 0.5:
-        model.train(feed=feed)
-        rewards, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = model.trade(feed)
+    rewards, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = context.model.trade(feed)
+    target_return=log_return_rate.sum(axis=0).mean()*2
+    while cum_reward < target_return:
+        context.model.train(feed=feed)
+        rewards, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = context.model.trade(feed)
     context.today_action = actions[-1].flatten()
 
 
 def handle_data(context, data):
     # trading_date = data.history(context.assets, ['close'], bar_count=1, frequency='1d').index[0].date()
-    trading_date = context.get_datetime().date
+    trading_date = context.get_datetime().date()
     context.i += 1
     action = context.today_action.flatten()[:-1]
     for k, asset in enumerate(context.assets):
@@ -113,9 +163,8 @@ if __name__ == '__main__':
     sp500 = pd.read_csv('sp500.csv')
     sp500.index = sp500['Symbol']
     high_cap_company = sp500.loc[list(itertools.chain.from_iterable(list(map(lambda x: x[1][-3:], list(sp500.sort_values('Market Cap').groupby('Sector').groups.items())))))]
-    model = DRL_Portfolio(feature_number=4 * 8, asset_number=4 + 1)
     
-    start = pd.Timestamp(pd.to_datetime('2002-02-08')).tz_localize('US/Eastern')
+    start = pd.Timestamp(pd.to_datetime('2005-02-08')).tz_localize('US/Eastern')
     end = pd.Timestamp(pd.to_datetime('2018-03-27')).tz_localize('US/Eastern')
     result = zipline.run_algorithm(start=start, end=end,
                                    initialize=initialize,
