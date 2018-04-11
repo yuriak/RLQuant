@@ -64,7 +64,7 @@ class DRL_PairsTrading(object):
             self.reward_t = tf.exp(self.log_reward_t)
             self.cum_reward = tf.reduce_prod(self.reward_t)
             self.sortino = self._sortino_ratio(self.log_reward_t, 0)
-            self.sharpe = self._sortino_ratio(self.log_reward_t, 0)
+            self.sharpe = self._sharpe_ratio(self.log_reward_t, 0)
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
             if object_function == 'reward':
@@ -115,6 +115,10 @@ class DRL_PairsTrading(object):
             self.previous_rnn_output: previous_output,
             self.c: fee
         }
+
+    def change_drop_keep_prob(self, feed_dict, new_prob):
+        feed_dict[self.dropout_keep_prob] = new_prob
+        return feed_dict
     
     def train(self, feed):
         self.session.run([self.train_op], feed_dict=feed)

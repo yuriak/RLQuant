@@ -29,13 +29,15 @@ Model interpretation:
         The objective is to maximize the total return.
 '''
 
+
 class DRL_Portfolio(object):
-    def __init__(self, feature_number, asset_number,object_function= 'sortino',  dense_units_list=[1024, 768, 512, 256, 128], rnn_hidden_layer_number=4, rnn_hidden_units_number=128, learning_rate=0.001):
+    def __init__(self, feature_number, asset_number, object_function='sortino', dense_units_list=[1024, 768, 512, 256, 128], rnn_hidden_layer_number=4, rnn_hidden_units_number=128, learning_rate=0.001):
         tf.reset_default_graph()
         self.f = tf.placeholder(dtype=tf.float32, shape=[None, feature_number], name='environment_features')
         self.z = tf.placeholder(dtype=tf.float32, shape=[None, asset_number], name='environment_return')
         self.c = tf.placeholder(dtype=tf.float32, shape=[], name='environment_fee')
         self.dropout_keep_prob = tf.placeholder(dtype=tf.float32, shape=[], name='dropout_keep_prob')
+        self.tao = tf.placeholder(dtype=tf.float32, shape=[], name='action_temperature')
         self.hidden_rnn_init_state = tf.placeholder(tf.float32, [rnn_hidden_layer_number, 1, rnn_hidden_units_number], name='hidden_rnn_initial_state')
         self.output_rnn_init_state = tf.placeholder(tf.float32, [1, asset_number], name='rnn_output_initial_state')
         self._state_per_layer_list = tf.unstack(self.hidden_rnn_init_state, axis=0) + [self.output_rnn_init_state]
@@ -58,19 +60,20 @@ class DRL_Portfolio(object):
             self.current_output = tf.reshape(self.rnn_outputs[0][-1], shape=[1, asset_number])
             self.rnn_outputs = tf.concat((self.previous_rnn_output, tf.unstack(self.rnn_outputs, axis=0)[0]), axis=0)
         with tf.variable_scope('action'):
+            self.rnn_outputs = self.rnn_outputs / self.tao
             self.action = tf.nn.softmax(self.rnn_outputs)
         
         with tf.variable_scope('reward'):
             self.reward_t = tf.reduce_sum(self.z * self.action[:-1] - self.c * tf.abs(self.action[1:] - self.action[:-1]), axis=1)
-            self.log_reward_t=tf.log(self.reward_t)
+            self.log_reward_t = tf.log(self.reward_t)
             self.cum_reward = tf.reduce_prod(self.reward_t)
             self.cum_log_reward = tf.reduce_sum(self.log_reward_t)
             self.sortino = self._sortino_ratio(self.log_reward_t, 0)
-            self.sharpe = self._sortino_ratio(self.log_reward_t, 0)
+            self.sharpe = self._sharpe_ratio(self.log_reward_t, 0)
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
             if object_function == 'reward':
-                self.train_op=optimizer.minimize(-self.cum_log_reward)
+                self.train_op = optimizer.minimize(-self.cum_log_reward)
             elif object_function == 'sharpe':
                 self.train_op = optimizer.minimize(-self.sharpe)
             else:
@@ -88,29 +91,30 @@ class DRL_Portfolio(object):
         output_state = zero_states[-1]
         return hidden_states, output_state
     
+    
     def _add_dense_layer(self, inputs, output_shape, drop_keep_prob, act=tf.nn.tanh):
         output = tf.contrib.layers.fully_connected(activation_fn=act, num_outputs=output_shape, inputs=inputs)
         output = tf.nn.dropout(output, drop_keep_prob)
         return output
     
-    def _sortino_ratio(self,r,rf):
+    def _sortino_ratio(self, r, rf):
         mean, var = tf.nn.moments(r, axes=[0])
-        sign = tf.sign(-tf.sign(r-rf) + 1)
+        sign = tf.sign(-tf.sign(r - rf) + 1)
         number = tf.reduce_sum(sign)
         lower = sign * r
         square_sum = tf.reduce_sum(tf.pow(lower, 2))
         sortino_var = tf.sqrt(square_sum / number)
-        sortino = (mean-rf) / sortino_var
+        sortino = (mean - rf) / sortino_var
         return sortino
     
-    def _sharpe_ratio(self,r,rf):
-        mean, var = tf.nn.moments(r-rf, axes=[0])
-        return mean/var
+    def _sharpe_ratio(self, r, rf):
+        mean, var = tf.nn.moments(r - rf, axes=[0])
+        return mean / var
     
     def _add_gru_cell(self, units_number):
         return tf.contrib.rnn.GRUCell(num_units=units_number)
     
-    def build_feed_dict(self, batch_F, batch_Z, keep_prob, fee, rnn_hidden_init_state, output_hidden_init_state, initial_output):
+    def build_feed_dict(self, batch_F, batch_Z, keep_prob, fee, rnn_hidden_init_state, output_hidden_init_state, initial_output, tao=1):
         return {
             self.f: batch_F,
             self.z: batch_Z,
@@ -118,20 +122,29 @@ class DRL_Portfolio(object):
             self.hidden_rnn_init_state: rnn_hidden_init_state,
             self.output_rnn_init_state: output_hidden_init_state,
             self.previous_rnn_output: initial_output,
-            self.c: fee
+            self.c: fee,
+            self.tao: tao
         }
+    
+    def change_tao(self, feed_dict, new_tao):
+        feed_dict[self.tao] = new_tao
+        return feed_dict
+    
+    def change_drop_keep_prob(self, feed_dict, new_prob):
+        feed_dict[self.dropout_keep_prob] = new_prob
+        return feed_dict
     
     def train(self, feed):
         self.session.run([self.train_op], feed_dict=feed)
-        
-    def load_model(self, model_file='./trade_model_checkpoint/trade_model'):
-        self.saver.restore(self.session,model_file)
     
-    def save_model(self,model_path='./trade_model_checkpoint'):
+    def load_model(self, model_file='./trade_model_checkpoint/trade_model'):
+        self.saver.restore(self.session, model_file)
+    
+    def save_model(self, model_path='./trade_model_checkpoint'):
         if not os.path.exists(model_path):
             os.mkdir(model_path)
-        model_file=model_path+'/trade_model'
-        self.saver.save(self.session,model_file)
+        model_file = model_path + '/trade_model'
+        self.saver.save(self.session, model_file)
     
     def trade(self, feed):
         rewards, cum_reward, actions, current_state, current_rnn_output = self.session.run([self.reward_t, self.cum_log_reward, self.action, self.current_state, self.current_output], feed_dict=feed)
