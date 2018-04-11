@@ -68,12 +68,13 @@ class DRL_Portfolio(object):
             self.log_reward_t = tf.log(self.reward_t)
             self.cum_reward = tf.reduce_prod(self.reward_t)
             self.cum_log_reward = tf.reduce_sum(self.log_reward_t)
+            self.mean_log_reward=tf.reduce_mean(self.log_reward_t)
             self.sortino = self._sortino_ratio(self.log_reward_t, 0)
             self.sharpe = self._sharpe_ratio(self.log_reward_t, 0)
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
             if object_function == 'reward':
-                self.train_op = optimizer.minimize(-self.cum_log_reward)
+                self.train_op = optimizer.minimize(-self.mean_log_reward)
             elif object_function == 'sharpe':
                 self.train_op = optimizer.minimize(-self.sharpe)
             else:
@@ -147,7 +148,7 @@ class DRL_Portfolio(object):
         self.saver.save(self.session, model_file)
     
     def trade(self, feed):
-        rewards, cum_reward, actions, current_state, current_rnn_output = self.session.run([self.reward_t, self.cum_log_reward, self.action, self.current_state, self.current_output], feed_dict=feed)
+        rewards, cum_log_reward, cum_reward, actions, current_state, current_rnn_output = self.session.run([self.reward_t, self.cum_log_reward, self.cum_reward, self.action, self.current_state, self.current_output], feed_dict=feed)
         hidden_current_states = np.array(current_state[:-1])
         output_current_state = current_state[-1]
-        return rewards, cum_reward, actions, hidden_current_states, output_current_state, current_rnn_output
+        return rewards, cum_log_reward ,cum_reward, actions, hidden_current_states, output_current_state, current_rnn_output

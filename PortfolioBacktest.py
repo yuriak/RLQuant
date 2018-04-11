@@ -138,18 +138,18 @@ def before_trading_start(context, data):
                                          rnn_hidden_init_state=hidden_initial_state,
                                          output_hidden_init_state=current_rnn_output,
                                          initial_output=current_rnn_output)
-    rewards, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = context.model.trade(feed)
-    spy_log_return = log_index_return[log_index_return['spy'] > 0].sum()
+    rewards, cum_log_reward, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = context.model.trade(feed)
     real_multiplier = context.target_profit_multiplier * (1 + context.i * 0.001)
-    target_return = spy_log_return * real_multiplier
+    target_return = index_return['spy'].prod() * real_multiplier
     while cum_reward < target_return:
         feed = context.model.change_drop_keep_prob(feed, 0.8)
         context.model.train(feed=feed)
         feed = context.model.change_drop_keep_prob(feed, 1.0)
-        rewards, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = context.model.trade(feed)
+        rewards, cum_log_reward, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = context.model.trade(feed)
     context.today_action = actions[-1].flatten()
     record(predict_reward=cum_reward.ravel()[0])
     record(spy=index_data['spy'][-1])
+    record(spy_return=index_return['spy'].prod()-1)
 
 
 def handle_data(context, data):
