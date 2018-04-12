@@ -62,7 +62,7 @@ def initialize(context):
     context.bootstrap_sequence_length = 300
     context.tb_log_dir = './log/%s' % back_test_name
     context.tensorboard = TensorBoard(log_dir=context.tb_log_dir)
-    context.target_profit_multiplier = 1.5
+    context.target_profit_multiplier = 1.1
     bundle = bundles.load('quandl')
     start_date_str = str(context.get_datetime().date())
     initial_history_start_date = bundle.equity_daily_bar_reader.sessions[bundle.equity_daily_bar_reader.sessions < start_date_str][(-context.bootstrap_sequence_length - 1)]
@@ -128,7 +128,7 @@ def before_trading_start(context, data):
     log_index_return = np.log(index_return)
     return_rate = (prices / prices.shift(1))[full_features.index[0]:]
     log_return_rate = np.log(return_rate)
-    f_data = full_features.join(log_return_rate).join(volumes).join(index_features).join(log_index_return)
+    f_data = full_features.join(prices).join(volumes).join(index_features).join(index_data)
     z_data = return_rate.join(pd.Series(np.ones((f_data.shape[0])) * 1.0001, index=f_data.index, name='ASSET'))[f_data.index[0]:]
     hidden_initial_state, current_rnn_output = context.model.get_rnn_zero_state()
     feed = context.model.build_feed_dict(batch_F=batch_nomorlize(f_data),
