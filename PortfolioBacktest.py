@@ -54,7 +54,7 @@ def initialize(context):
     context.i = 0
     context.assets = list(map(lambda x: symbol(x), high_cap_company.Symbol.values))
     print(context.assets, len(context.assets))
-    context.model_fee = 1e-2
+    context.model_fee = 1e-3
     context.previous_predict_reward = 0
     context.previous_action = 0
     context.set_commission(commission.PerShare(cost=0.005, min_trade_cost=1.0))
@@ -108,7 +108,7 @@ def initialize(context):
         print('index data exist')
         index_data = pd.read_pickle('index')
         context.index_data = index_data['Last', str(initial_history_start_date):]
-    context.model = DRL_Portfolio(feature_number=len(context.assets) * 8 + context.index_data.columns.shape[0] * 7, asset_number=len(context.assets) + 1, object_function='reward')
+    context.model = DRL_Portfolio(feature_number=len(context.assets) * 8 + context.index_data.columns.shape[0] * 7, asset_number=len(context.assets) + 1, object_function='sortino')
     context.model.init_model()
 
 
@@ -140,7 +140,10 @@ def before_trading_start(context, data):
                                          initial_output=current_rnn_output)
     rewards, cum_log_reward, cum_reward, actions, hidden_initial_state, output_initial_state, current_rnn_output = context.model.trade(feed)
     real_multiplier = context.target_profit_multiplier * (1 + context.i * 0.001)
-    target_return = index_return['spy'].prod() * real_multiplier
+    # target_return = index_return['spy'].prod() * real_multiplier
+    index_current_return = index_return['spy'].prod()
+    target_return = context.target_profit_multiplier * 1.5 * index_current_return if index_current_return < 1 else context.target_profit_multiplier * index_current_return
+    
     while cum_reward < target_return:
         feed = context.model.change_drop_keep_prob(feed, 0.8)
         context.model.train(feed=feed)
@@ -149,7 +152,7 @@ def before_trading_start(context, data):
     context.today_action = actions[-1].flatten()
     record(predict_reward=cum_reward.ravel()[0])
     record(spy=index_data['spy'][-1])
-    record(spy_return=index_return['spy'].prod()-1)
+    record(spy_return=index_return['spy'].prod() - 1)
 
 
 def handle_data(context, data):
@@ -168,7 +171,7 @@ def handle_data(context, data):
 
 
 if __name__ == '__main__':
-    back_test_name = 'price_index_better_stop_learning_backtest'
+    back_test_name = 'price_index_sortino_backtest2'
     if not os.path.exists('sp500.csv'):
         print('downloading sp500 data')
         with open('sp500.csv', 'wb+') as f:

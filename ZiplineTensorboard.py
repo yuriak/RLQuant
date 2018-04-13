@@ -7,6 +7,7 @@ This code was from: https://github.com/jimgoo/zipline-tensorboard
 Thanks to Jimgoo
 """
 
+
 class TensorBoard(object):
     """
     TensorBoard is a visualization tool provided with TensorFlow.
@@ -29,9 +30,9 @@ class TensorBoard(object):
         self.log_dir = log_dir
         self.merged = tf.summary.merge_all()
         self.writer = tf.summary.FileWriter(self.log_dir,
-                                             max_queue=max_queue,
-                                             flush_secs=flush_secs,
-                                             )
+                                            max_queue=max_queue,
+                                            flush_secs=flush_secs
+                                            )
     
     def log_dict(self, epoch, logs):
         """
@@ -41,7 +42,6 @@ class TensorBoard(object):
             logs: A dict containing what we want to log to TensorBoard.
         """
         for name, value in logs.items():
-            if type(value) is not np.ndarray: continue
             summary = tf.Summary()
             summary_value = summary.value.add()
             summary_value.simple_value = value
@@ -86,8 +86,6 @@ class TensorBoard(object):
         
         # add any extras passed in through `other_logs` dictionary
         for name, value in other_logs.items():
-            if type(value) is not np.ndarray:
-                continue
             logs[name] = value
         
         self.log_dict(epoch, logs)
