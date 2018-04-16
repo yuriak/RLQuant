@@ -38,7 +38,7 @@ def generate_tech_data(stock):
     data[name + '_rsi'] = talib.RSI(price, timeperiod=10)
     data[name + '_cmo'] = talib.CMO(price)
     data = data.drop(name, axis=1)
-    data = data.fillna(method='bfill')
+    data = data.fillna(method='bfill').fillna(1)
     return data
 
 
@@ -64,7 +64,7 @@ def initialize(context):
     context.set_commission(commission.PerShare(cost=0.005, min_trade_cost=1.0))
     context.set_slippage(slippage.VolumeShareSlippage())
     context.bootstrap_sequence_length = 300
-    context.max_sequence_length = 60
+    context.max_sequence_length = 30
     context.tb_log_dir = './log/%s' % back_test_name
     context.model_update_time = 30
     context.target_profit_multiplier = 1.1
@@ -115,6 +115,15 @@ def initialize(context):
         index_data = pd.read_pickle('index')
         # index_data = index_data.transpose(2,1,0)
         context.index_data = index_data[:, str(initial_history_start_date):, :]
+
+    if not os.path.exists('trading_content'):
+        sys.exit(1)
+    else:
+        news_vec = pd.read_csv('trading_content')
+        news_vec.index = news_vec.date
+        news_vec = news_vec.drop('date', axis=1)
+        news_vec= context.history_data[:,:,'adj_close'].join(news_vec).drop(context.history_data.items,axis=1).fillna(0)
+        context.news_vec = news_vec
     
     feature_network_topology = {
         'equity_network': {
@@ -146,6 +155,51 @@ def initialize(context):
                 'attention_length': 10
             },
             'keep_output': False
+        },
+        'weight_network':{
+            'feature_map_number': 1,
+            'feature_number': len(context.assets)+1,
+            'input_name': 'weight',
+            'dense': {
+                'n_units': [32, 64, 32],
+                'act': [tf.nn.tanh] * 3,
+            },
+            'rnn': {
+                'n_units': [16, 8],
+                'act': [tf.nn.tanh, tf.nn.tanh],
+                'attention_length': 10
+            },
+            'keep_output': False
+        },
+        'return_network':{
+            'feature_map_number': 1,
+            'feature_number': 1,
+            'input_name': 'return',
+            'dense': {
+                'n_units': [32, 16, 8],
+                'act': [tf.nn.tanh] * 3,
+            },
+            'rnn': {
+                'n_units': [4, 2],
+                'act': [tf.nn.tanh, tf.nn.tanh],
+                'attention_length': 10
+            },
+            'keep_output': False
+        },
+        'news_network':{
+            'feature_map_number': 1,
+            'feature_number': 100,
+            'input_name': 'return',
+            'dense': {
+                'n_units': [128, 64, 32],
+                'act': [tf.nn.tanh] * 3,
+            },
+            'rnn': {
+                'n_units': [16, 8],
+                'act': [tf.nn.tanh, tf.nn.tanh],
+                'attention_length': 10
+            },
+            'keep_output': False
         }
     }
     context.model = DRL_Portfolio(asset_number=len(context.assets),
@@ -153,6 +207,7 @@ def initialize(context):
                                   action_network_layers=[128, 64],
                                   object_function='reward')
     context.real_return = []
+    context.history_action = []
     context.model.init_model()
     context.tensorboard = TensorBoard(log_dir=context.tb_log_dir, session=context.model.get_session())
 
@@ -165,7 +220,7 @@ def before_trading_start(context, data):
     spy_index = context.index_data['spy', :str(trading_date), 'Last'][:-1].fillna(method='ffill')
     stock_features = {}
     for c in history_data.items:
-        stock_data = history_data[c, :-1, ['adj_close', 'adj_volume']].fillna(method='bfill')
+        stock_data = history_data[c, :-1, ['adj_close', 'adj_volume']].fillna(method='ffill')
         tech_data = generate_tech_data(stock_data['adj_close'].astype(float))
         stock_data['log_volume'] = np.log(stock_data['adj_volume'])
         tech_data = tech_data.join(stock_data['log_volume'])
@@ -176,7 +231,7 @@ def before_trading_start(context, data):
     stock_features = pd.Panel(stock_features)
     index_features = {}
     for i in index_data.items:
-        index = index_data[i, :-1, 'Last'].fillna(method='bfill')
+        index = index_data[i, :-1, 'Last'].fillna(method='ffill')
         tech_data = generate_tech_data(index)
         log_return = np.log((index / index.shift(1)).fillna(1))
         tech_data = tech_data.join(log_return)
@@ -185,19 +240,38 @@ def before_trading_start(context, data):
     index_features = pd.Panel(index_features)
     assert stock_features.shape[0] == len(context.assets)
     assert stock_features.shape[1] == index_features.shape[1]
-    
-    # if context.i == 1:
-    #     real_return = np.ones(stock_features.shape[0])
-    #     context.real_return = list(real_return)
-    # else:
-    #     real_return = np.array(context.real_return)
-    # real_return = pd.Series(real_return, name='real_return', index=stock_features.iloc[0].index)
-    # real_return = np.log((real_return / real_return.shift(1)).fillna(1))
+    if context.i == 1:
+        real_return = np.zeros(stock_features.shape[1])
+        context.real_return = list(real_return)
+    else:
+        real_return = np.array(context.real_return)[-context.max_sequence_length:]
+    if context.i == 1:
+        portfolio_weight = np.ones((stock_features.shape[1],len(context.assets)+1))
+        portfolio_weight = np.exp(portfolio_weight)/np.sum(np.exp(portfolio_weight),axis=1).reshape((stock_features.shape[1],1))
+        context.history_weight=list(portfolio_weight)
+    else:
+        portfolio_weight = np.array(context.history_weight)[-context.max_sequence_length:]
+    return_features=np.expand_dims(real_return.reshape(real_return.shape[0],1),axis=0)
+    portfolio_weight_features=np.expand_dims(portfolio_weight,axis=0)
+    assert return_features.shape[1] == stock_features.shape[1]
+    assert portfolio_weight_features.shape[1] == stock_features.shape[1]
+    assert portfolio_weight_features.shape[2] == len(context.assets)+1
+
+    news_features=np.expand_dims(context.news_vec.values[-context.max_sequence_length:],axis=0)
+    assert news_features.shape[1] == stock_features.shape[1]
     
     return_rate = (prices / prices.shift(1)).join(pd.Series(np.ones(prices.shape[0]) * 1.001, index=prices.index, name='CASH'))[stock_features.iloc[0].index[0]:]
     
     spy_return = (spy_index / spy_index.shift(1))[stock_features.iloc[0].index[0]:]
-    feed = context.model.build_feed_dict(input_data={'equity_network': stock_features.values, 'index_network': index_features.values}, return_rate=return_rate, fee=context.model_fee, keep_prob=1.0)
+    feed = context.model.build_feed_dict(input_data={'equity_network': stock_features.values,
+                                                     'index_network': index_features.values,
+                                                     'return_network':return_features,
+                                                     'weight_network':portfolio_weight_features,
+                                                     'news_network':news_features
+                                                     },
+                                         return_rate=return_rate,
+                                         fee=context.model_fee,
+                                         keep_prob=1.0)
     if context.i == 1:
         context.model.train(feed)
     rewards, cum_log_reward, cum_reward, actions = context.model.trade(feed)
@@ -228,10 +302,11 @@ def handle_data(context, data):
     if context.tensorboard is not None:
         context.tensorboard.log_algo(context, epoch=context.i)
     context.real_return.append(context.portfolio.returns)
+    context.history_action.append(action)
 
 
 if __name__ == '__main__':
-    back_test_name = 'model_EIIE_attention2'
+    back_test_name = 'model_EIIE_news'
     if not os.path.exists('sp500.csv'):
         print('downloading sp500 data')
         with open('sp500.csv', 'wb+') as f:

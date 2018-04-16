@@ -92,7 +92,10 @@ class DRL_Portfolio(object):
                     attention = tf.contrib.rnn.AttentionCellWrapper(cell=layered_cell, attn_length=rnn_config['attention_length'])
                     output, state = tf.nn.dynamic_rnn(cell=attention, inputs=output, dtype=tf.float32)
                     output = tf.unstack(output, axis=0)
-                    output = tl.layers.merge(output, mode='concat')
+                    if v['feature_map_number'] > 1:
+                        output = tl.layers.merge(output, mode='concat')
+                    else:
+                        output = tf.unstack(output,axis=0)[0]
                     output = tf.concat((tf.zeros(shape=[1, output.shape[1]]), output), axis=0)
                 self.feature_outputs.append(output)
                 if v['keep_output']:
