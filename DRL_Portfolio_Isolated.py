@@ -30,6 +30,7 @@ Model interpretation:
         The objective is to maximize the total return.
 '''
 
+
 # feature_network_topology = {
 #     'equity_network': {
 #         'feature_map_number': 10,
@@ -79,12 +80,13 @@ class DRL_Portfolio(object):
         for k, v in feature_network_topology.items():
             with tf.variable_scope(k, initializer=tf.contrib.layers.xavier_initializer(uniform=False)):
                 X = tf.placeholder(dtype=tf.float32, shape=[v['feature_map_number'], None, v['feature_number']], name=v['input_name'])
-                self.model_inputs[k]=X
-                output = X
+                self.model_inputs[k] = X
+                output = tl.layers.normalization.batch_normalization(X)
                 if 'dense' in v:
                     dense_config = v['dense']
                     for n, a in zip(dense_config['n_units'], dense_config['act']):
                         output = self._add_dense_layer(output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
+                    output = tl.layers.normalization.batch_normalization(output)
                 if 'rnn' in v:
                     rnn_config = v['rnn']
                     rnn_cells = [self._add_letm_cell(i, a) for i, a in list(zip(rnn_config['n_units'], rnn_config['act']))]
@@ -95,19 +97,21 @@ class DRL_Portfolio(object):
                     if v['feature_map_number'] > 1:
                         output = tl.layers.merge(output, mode='concat')
                     else:
-                        output = tf.unstack(output,axis=0)[0]
+                        output = output[0]
                     output = tf.concat((tf.zeros(shape=[1, output.shape[1]]), output), axis=0)
+                    output = tl.layers.normalization.batch_normalization(output)
                 self.feature_outputs.append(output)
                 if v['keep_output']:
                     self.keep_output = output
-        with tf.variable_scope('action', initializer=tf.contrib.layers.xavier_initializer(uniform=False), regularizer=tf.contrib.layers.l2_regularizer(0.01)):
+        with tf.variable_scope('action', initializer=tf.contrib.layers.xavier_initializer(uniform=False)):
             feature_maps = tl.layers.merge(self.feature_outputs, mode='concat')
             for l in action_network_layers:
                 feature_maps = self._add_dense_layer(feature_maps, l, self.dropout_keep_prob)
-            feature_maps = self._add_dense_layer(feature_maps, self.real_asset_number, self.dropout_keep_prob)
-            cash_vector = self._add_dense_layer(feature_maps, 1, self.dropout_keep_prob)
+            feature_maps = self._add_dense_layer(feature_maps, self.real_asset_number, self.dropout_keep_prob, act=tf.nn.sigmoid)
+            feature_maps = tl.layers.normalization.batch_normalization(feature_maps)
+            cash_vector = self._add_dense_layer(feature_maps, 1, self.dropout_keep_prob, act=None)
             self.action = tl.layers.merge([self.keep_output, cash_vector], mode='concat')
-            self.action = tl.layers.merge([self.action, feature_maps], mode='elemwise_sum')
+            self.action = tl.layers.merge([self.action, feature_maps], mode='elemwise_mul')
             self.action = self.action / self.tao
             self.action = tf.nn.softmax(self.action)
         with tf.variable_scope('reward'):
