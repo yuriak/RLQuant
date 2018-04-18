@@ -21,7 +21,7 @@
   The model was originally from [1], improved with some ideas from [2] and [3]. However, during the backtest, 
   I found that it is still difficult to model the interaction of agent and market environment correctly, especially in a live trading scenario.   
   
-  
+  ![network.png](network.png)
   
 
 ## Experiment
