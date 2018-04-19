@@ -143,5 +143,6 @@ def prepare_news_data(reference_equity_data,data_path='data/news.csv'):
         return news_vec
     
 def retrieve_equitys(bundle,assets):
-    all_assets=bundle.asset_finder.retrieve_all()
+    sids=bundle.asset_finder.sids
+    all_assets=bundle.asset_finder.retrieve_all(sids)
     return list(filter(lambda x:x.symbol in assets,all_assets))
