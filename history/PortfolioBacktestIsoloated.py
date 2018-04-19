@@ -1,21 +1,22 @@
 # -*- coding:utf-8 -*-
-import itertools
-import os
-import sys
-
-import logbook
-import numpy as np
 import pandas as pd
-import quandl
-import requests
-import talib
-import tensorflow as tf
 import zipline
-from zipline.api import record, symbol, order_target_percent
-from zipline.data import bundles
-from zipline.finance import commission, slippage
+import quandl
+from DRL_Portfolio_EIIE_simple import DRL_Portfolio
+import logbook
+import talib
+import sys
+import requests
+import itertools
+import sys
+import os
+import tensorflow as tf
 
-from model.DRL_Portfolio_Isolated import DRL_Portfolio
+from zipline.api import order_target, record, symbol, order_target_percent, set_benchmark, order_target
+from zipline.finance import commission, slippage
+from zipline.data import bundles
+import matplotlib.pyplot as plt
+import numpy as np
 
 zipline_logging = logbook.NestedSetup([
     logbook.NullHandler(level=logbook.DEBUG),
@@ -23,7 +24,7 @@ zipline_logging = logbook.NestedSetup([
     logbook.StreamHandler(sys.stderr, level=logbook.ERROR),
 ])
 zipline_logging.push_application()
-from history.ZiplineTensorboard import TensorBoard
+from ZiplineTensorboard import TensorBoard
 
 quandl.ApiConfig.api_key = 'CTq2aKvtCkPPgR4L_NFs'
 
@@ -65,7 +66,7 @@ def generate_tech_data(stock, open_name, close_name, high_name, low_name):
     data['WILLR'] = talib.WILLR(high_price, low_price, close_price)
     data['NATR'] = talib.NATR(high_price, low_price, close_price)
     data['TRANGE'] = talib.TRANGE(high_price, low_price, close_price)
-    # data = data.drop([open_name, close_name, high_name, low_name], axis=1)
+    data = data.drop([open_name, close_name, high_name, low_name], axis=1)
     data = data.dropna()
     return data
 
@@ -79,7 +80,7 @@ def batch_nomorlize(f_data):
     return z_score(f_data[need_normalize]).join(f_data[keep_original])
 
 
-def normallize_all(f_data):
+def normalize_all(f_data):
     return z_score(f_data)
 
 
@@ -114,14 +115,15 @@ def initialize(context):
     context.i = 1
     context.assets = list(map(lambda x: symbol(x), high_cap_company.Symbol.values))
     print(context.assets, len(context.assets))
-    context.model_fee = 1e-1
+    context.model_fee = 5e-3
     context.set_commission(commission.PerShare(cost=0.005, min_trade_cost=1.0))
     context.set_slippage(slippage.VolumeShareSlippage())
     context.bootstrap_sequence_length = 300
-    context.max_sequence_length = 15
+    context.max_sequence_length = 60
     context.tb_log_dir = './log/%s' % back_test_name
-    context.model_update_time = 10
+    context.model_update_time = 30
     context.target_profit_multiplier = 1.1
+    context.model_summaries = None
     bundle = bundles.load('quandl')
     start_date_str = str(context.get_datetime().date())
     initial_history_start_date = bundle.equity_daily_bar_reader.sessions[bundle.equity_daily_bar_reader.sessions < start_date_str][(-context.bootstrap_sequence_length - 1)]
@@ -185,12 +187,12 @@ def initialize(context):
             'feature_number': context.history_data.shape[2],
             'input_name': 'equity',
             'dense': {
-                'n_units': [1024, 512, 256],
-                'act': [tf.nn.tanh] * 3,
+                'n_units': [128, 64],
+                'act': [tf.nn.tanh] * 2,
             },
             'rnn': {
-                'n_units': [128, 64, 1],
-                'act': [tf.nn.tanh, tf.nn.tanh, None],
+                'n_units': [32, 1],
+                'act': [tf.nn.tanh, None],
                 'attention_length': 10
             },
             'keep_output': True
@@ -200,12 +202,12 @@ def initialize(context):
             'feature_number': context.index_data.shape[2],
             'input_name': 'index',
             'dense': {
-                'n_units': [1024, 512, 256],
-                'act': [tf.nn.tanh] * 3,
+                'n_units': [128, 64],
+                'act': [tf.nn.tanh] * 2,
             },
             'rnn': {
-                'n_units': [128, 64, 32],
-                'act': [tf.nn.tanh] * 3,
+                'n_units': [32, 16],
+                'act': [tf.nn.tanh, tf.nn.tanh],
                 'attention_length': 10
             },
             'keep_output': False
@@ -215,12 +217,12 @@ def initialize(context):
             'feature_number': len(context.assets) + 1,
             'input_name': 'weight',
             'dense': {
-                'n_units': [512, 256, 128],
-                'act': [tf.nn.tanh] * 3,
+                'n_units': [32, 16],
+                'act': [tf.nn.tanh] * 2,
             },
             'rnn': {
-                'n_units': [64, 32, 16],
-                'act': [tf.nn.tanh, tf.nn.tanh, tf.nn.tanh],
+                'n_units': [16, 8],
+                'act': [tf.nn.tanh, tf.nn.tanh],
                 'attention_length': 10
             },
             'keep_output': False
@@ -230,8 +232,8 @@ def initialize(context):
             'feature_number': 1,
             'input_name': 'return',
             'dense': {
-                'n_units': [32, 16, 8],
-                'act': [tf.nn.tanh] * 3,
+                'n_units': [8, 4],
+                'act': [tf.nn.tanh] * 2,
             },
             'rnn': {
                 'n_units': [4, 2],
@@ -245,12 +247,12 @@ def initialize(context):
             'feature_number': 100,
             'input_name': 'return',
             'dense': {
-                'n_units': [1024, 512, 256],
-                'act': [tf.nn.tanh] * 3,
+                'n_units': [128, 64],
+                'act': [tf.nn.tanh] * 2,
             },
             'rnn': {
-                'n_units': [128, 64, 32],
-                'act': [tf.nn.tanh, tf.nn.tanh, tf.nn.tanh],
+                'n_units': [32, 16],
+                'act': [tf.nn.tanh, tf.nn.tanh],
                 'attention_length': 10
             },
             'keep_output': False
@@ -258,7 +260,7 @@ def initialize(context):
     }
     context.model = DRL_Portfolio(asset_number=len(context.assets),
                                   feature_network_topology=feature_network_topology,
-                                  action_network_layers=[128, 64, 32],
+                                  action_network_layers=[32, 16],
                                   object_function='reward')
     context.real_return = []
     context.history_weight = []
@@ -272,7 +274,7 @@ def before_trading_start(context, data):
     stock_features = context.history_data[:, :str(trading_date), :][:, -context.max_sequence_length - 1:-1, :]
     # stock_features = context.history_data[:, :str(trading_date), :]
     index_features = context.index_data[:, stock_features.major_axis, :]
-    news_features = context.news_vec.loc[stock_features.major_axis]
+    news_features = context.news_vec.loc[stock_features.major_axis].fillna(0)
     # spy_index = context.index_data['spy', :str(trading_date), 'Last'][:-1].fillna(method='ffill')
     assert stock_features.shape[1] == index_features.shape[1]
     
@@ -294,13 +296,15 @@ def before_trading_start(context, data):
     assert return_features.shape[1] == stock_features.shape[1]
     assert portfolio_weight_features.shape[1] == stock_features.shape[1]
     assert portfolio_weight_features.shape[2] == len(context.assets) + 1
-    
+
     # news_features = context.news_vec[:str(trading_date)][-context.max_sequence_length:]
     news_features = np.expand_dims(news_features.values, axis=0)
     assert news_features.shape[1] == stock_features.shape[1]
-    
+
     # return_rate = (prices / prices.shift(1)).join(pd.Series(np.ones(prices.shape[0]) * 1.001, index=prices.index, name='CASH'))[stock_features.major_index[0]:]
     return_rate = stock_features[:, :, 'return_rate'].join(pd.Series(np.ones(stock_features.shape[1]) * 1.001, index=stock_features.major_axis, name='CASH'))
+    stock_features = stock_features.apply(func=normalize_all, axis='major_axis')
+    index_features = index_features.apply(func=normalize_all, axis='major_axis')
     # spy_return = (spy_index / spy_index.shift(1))[stock_features.major_axis[0]:]
     feed = context.model.build_feed_dict(input_data={'equity_network': stock_features.values,
                                                      'index_network': index_features.values,
@@ -310,13 +314,17 @@ def before_trading_start(context, data):
                                                      },
                                          return_rate=return_rate,
                                          fee=context.model_fee,
-                                         keep_prob=1.0,
-                                         tao=1.0
+                                         keep_prob=0.8,
+                                         tao=10.0
                                          )
     # if context.i == 1:
     # for i in range(10):
     context.model.train(feed)
     rewards, cum_log_reward, cum_reward, actions = context.model.trade(feed)
+    try:
+        context.model_summaries = context.model.get_summary(feed)
+    except Exception as e:
+        pass
     print('actual return', context.portfolio.returns + 1, 'expect reward:', cum_reward, 'on', str(trading_date))
     record(predict_reward=cum_reward.ravel()[0])
     # record(spy=spy_index[-1])
@@ -328,7 +336,7 @@ def before_trading_start(context, data):
         rewards, cum_log_reward, cum_reward, actions = context.model.trade(feed)
         epoch = 0
         while cum_reward < 1.2 and epoch < 10:
-            feed = context.model.change_drop_keep_prob(feed, 0.8)
+            # feed = context.model.change_drop_keep_prob(feed, 0.9)
             context.model.train(feed=feed)
             rewards, cum_log_reward, cum_reward, actions = context.model.trade(feed)
             epoch += 1
@@ -339,16 +347,17 @@ def handle_data(context, data):
     holding_securities = dict(filter(lambda x: x[1] > 0.05, list(zip(context.assets, context.today_action))))
     print(holding_securities)
     action = context.today_action
+    action = np.nan_to_num(action)
     for k, asset in enumerate(context.assets):
         order_target_percent(asset, action[k])
     if context.tensorboard is not None:
-        context.tensorboard.log_algo(context, epoch=context.i)
+        context.tensorboard.log_algo(context, model_summaries=context.model_summaries, epoch=context.i)
     context.real_return.append(context.portfolio.returns)
     context.history_weight.append(action)
 
 
 if __name__ == '__main__':
-    back_test_name = 'model_EIIE_tao'
+    back_test_name = 'model_EIIE_simple'
     if not os.path.exists('sp500.csv'):
         print('downloading sp500 data')
         with open('sp500.csv', 'wb+') as f:

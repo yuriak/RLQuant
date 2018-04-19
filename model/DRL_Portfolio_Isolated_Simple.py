@@ -161,6 +161,7 @@ class DRL_Portfolio(object):
             self.mean_log_reward = tf.reduce_mean(self.log_reward_t)
             self.sortino = self._sortino_ratio(self.log_reward_t, 0)
             self.sharpe = self._sharpe_ratio(self.log_reward_t, 0)
+            tf.summary.histogram('reward_t',self.reward_t)
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
             if object_function == 'reward':
@@ -169,18 +170,22 @@ class DRL_Portfolio(object):
                 self.train_op = optimizer.minimize(-self.sharpe)
             else:
                 self.train_op = optimizer.minimize(-self.sortino)
+        for var in tf.trainable_variables():
+            tf.summary.histogram(var.op.name, var)
+        self.merge_op = tf.summary.merge_all()
         self.init_op = tf.global_variables_initializer()
         self.saver = tf.train.Saver()
         self.session = tf.Session()
-        for var in tf.trainable_variables():
-            tf.summary.histogram(var.op.name, var)
-        self.summaries = tf.summary.merge_all()
+        
     
     def init_model(self):
         self.session.run(self.init_op)
     
     def get_session(self):
         return self.session
+    
+    def get_parameters(self):
+        return tf.trainable_variables()
     
     def _add_dense_layer(self, inputs, output_shape, drop_keep_prob, act=tf.nn.tanh):
         output = tf.contrib.layers.fully_connected(activation_fn=act, num_outputs=output_shape, inputs=inputs)
@@ -227,7 +232,7 @@ class DRL_Portfolio(object):
         return feed_dict
     
     def get_summary(self, feed):
-        return self.session.run(self.summaries, feed_dict=feed)
+        return self.session.run(self.merge_op, feed_dict=feed)
     
     def train(self, feed):
         self.session.run([self.train_op], feed_dict=feed)

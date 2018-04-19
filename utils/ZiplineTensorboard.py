@@ -26,15 +26,16 @@ class TensorBoard(object):
             and events to disk. [default 120]
     """
     
-    def __init__(self, log_dir='./logs', max_queue=10, flush_secs=120):
+    def __init__(self, session, log_dir='./logs', max_queue=10, flush_secs=120):
         self.log_dir = log_dir
-        self.merged = tf.summary.merge_all()
+        # self.merged = tf.summary.merge_all()
         self.writer = tf.summary.FileWriter(self.log_dir,
                                             max_queue=max_queue,
-                                            flush_secs=flush_secs
+                                            flush_secs=flush_secs,
+                                            graph=session.graph
                                             )
     
-    def log_dict(self, epoch, logs):
+    def log_dict(self, epoch, logs, model_summaries=None):
         """
         Writes a dictionary of simple named values to TensorBoard.
         Args:
@@ -47,9 +48,11 @@ class TensorBoard(object):
             summary_value.simple_value = value
             summary_value.tag = name
             self.writer.add_summary(summary, global_step=epoch)
+        if model_summaries is not None:
+            self.writer.add_summary(model_summaries, global_step=epoch)
         self.writer.flush()
     
-    def log_algo(self, algo, epoch=None, other_logs={}):
+    def log_algo(self, algo, model_summaries=None, epoch=None, other_logs={}):
         """
         Logs info about a Zipline algorithm as it's running.
         Args:
@@ -88,4 +91,5 @@ class TensorBoard(object):
         for name, value in other_logs.items():
             logs[name] = value
         
-        self.log_dict(epoch, logs)
+        self.log_dict(epoch, logs, model_summaries)
+
