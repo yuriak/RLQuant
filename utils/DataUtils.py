@@ -106,7 +106,7 @@ def prepare_equity_data(start_date, assets, data_path='data/equity_data'):
     return equity_data
 
 def prepare_index_data(start_date,equity_reference_index=None,datapath='data/index_data'):
-    if not os.path.exists('data/index_data'):
+    if not os.path.exists(datapath):
         print('downloading index data')
         spy = quandl.get("CHRIS/CME_SP1", authtoken="CTq2aKvtCkPPgR4L_NFs")
         gc = quandl.get("CHRIS/CME_GC1", authtoken="CTq2aKvtCkPPgR4L_NFs")
@@ -119,13 +119,13 @@ def prepare_index_data(start_date,equity_reference_index=None,datapath='data/ind
         vix = vix.astype(np.float64)
         vix.columns = ['Open', 'High', 'Low', 'Last']
         index_data = pd.Panel({'vix': vix, 'gc': gc, 'si': si, 'spy': spy})
-        index_data.to_pickle('index')
+        index_data.to_pickle(datapath)
         index_data = index_data[:, str(start_date):, :]
         index_data = generate_index_features(index_data)
         print('Done')
     else:
         print('index data exist')
-        index_data = pd.read_pickle('index')
+        index_data = pd.read_pickle(datapath)
         index_data = index_data[:, str(start_date):, :]
         index_data = generate_index_features(index_data)
     if equity_reference_index is not None:
