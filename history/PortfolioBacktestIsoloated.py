@@ -1,22 +1,20 @@
 # -*- coding:utf-8 -*-
-import pandas as pd
-import zipline
-import quandl
-from DRL_Portfolio_Isolated import DRL_Portfolio
-import logbook
-import talib
-import sys
-import requests
 import itertools
-import sys
 import os
-import tensorflow as tf
+import sys
 
-from zipline.api import order_target, record, symbol, order_target_percent, set_benchmark, order_target
-from zipline.finance import commission, slippage
-from zipline.data import bundles
-import matplotlib.pyplot as plt
+import logbook
 import numpy as np
+import pandas as pd
+import quandl
+import requests
+import talib
+import tensorflow as tf
+import zipline
+from DRL_Portfolio_Isolated import DRL_Portfolio
+from zipline.api import record, symbol, order_target_percent
+from zipline.data import bundles
+from zipline.finance import commission, slippage
 
 zipline_logging = logbook.NestedSetup([
     logbook.NullHandler(level=logbook.DEBUG),
@@ -24,7 +22,7 @@ zipline_logging = logbook.NestedSetup([
     logbook.StreamHandler(sys.stderr, level=logbook.ERROR),
 ])
 zipline_logging.push_application()
-from ZiplineTensorboard import TensorBoard
+from history.ZiplineTensorboard import TensorBoard
 
 quandl.ApiConfig.api_key = 'CTq2aKvtCkPPgR4L_NFs'
 

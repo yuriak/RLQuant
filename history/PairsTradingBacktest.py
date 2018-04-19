@@ -1,15 +1,14 @@
 # -*- coding:utf-8 -*-
-import pandas as pd
-import zipline
-from DRL_PairsTrading import DRL_PairsTrading
-import logbook
-import talib
 import sys
 
-from zipline.api import order_target, record, symbol, order_target_percent, set_benchmark, order_target
-from zipline.finance import commission, slippage
-import matplotlib.pyplot as plt
+import logbook
 import numpy as np
+import pandas as pd
+import talib
+import zipline
+from DRL_PairsTrading import DRL_PairsTrading
+from zipline.api import record, symbol, order_target_percent
+from zipline.finance import commission, slippage
 
 zipline_logging = logbook.NestedSetup([
     logbook.NullHandler(level=logbook.DEBUG),
@@ -17,7 +16,7 @@ zipline_logging = logbook.NestedSetup([
     logbook.StreamHandler(sys.stderr, level=logbook.ERROR),
 ])
 zipline_logging.push_application()
-from ZiplineTensorboard import TensorBoard
+from history.ZiplineTensorboard import TensorBoard
 
 def generate_tech_data(p1_df,p2_df):
     sample = pd.DataFrame({'p1': p1_df.values.ravel(), 'p2': p2_df.values.ravel()}, index=p1_df.index)
