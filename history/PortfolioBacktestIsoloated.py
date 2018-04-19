@@ -11,10 +11,11 @@ import requests
 import talib
 import tensorflow as tf
 import zipline
-from DRL_Portfolio_Isolated import DRL_Portfolio
 from zipline.api import record, symbol, order_target_percent
 from zipline.data import bundles
 from zipline.finance import commission, slippage
+
+from model.DRL_Portfolio_Isolated import DRL_Portfolio
 
 zipline_logging = logbook.NestedSetup([
     logbook.NullHandler(level=logbook.DEBUG),

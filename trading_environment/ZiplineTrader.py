@@ -22,7 +22,7 @@ zipline_logging = logbook.NestedSetup([
     logbook.StreamHandler(sys.stderr, level=logbook.ERROR),
 ])
 zipline_logging.push_application()
-from history.ZiplineTensorboard import TensorBoard
+from utils.ZiplineTensorboard import TensorBoard
 
 quandl.ApiConfig.api_key = 'CTq2aKvtCkPPgR4L_NFs'
 
