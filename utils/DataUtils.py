@@ -141,3 +141,7 @@ def prepare_news_data(reference_equity_data,data_path='data/news.csv'):
         news_vec = news_vec.drop('date', axis=1)
         news_vec = reference_equity_data[:, :, 'return_rate'].join(news_vec).drop(reference_equity_data.items, axis=1).fillna(0)
         return news_vec
+    
+def retrieve_equitys(bundle,assets):
+    all_assets=bundle.asset_finder.retrieve_all()
+    return list(filter(lambda x:x.symbol in assets,all_assets))

@@ -53,7 +53,8 @@ if not os.path.exists('sp500.csv'):
 sp500 = pd.read_csv('sp500.csv')
 sp500.index = sp500['Symbol']
 high_cap_company = sp500.loc[list(itertools.chain.from_iterable(list(map(lambda x: x[1][-5:], list(sp500.sort_values('Market Cap').groupby('Sector').groups.items())))))]
-assets = list(map(lambda x: symbol(x), high_cap_company.Symbol.values))
+assets = list(high_cap_company.Symbol.values)
+assets=retrieve_equitys(bundle,assets)
 # =========================================
 # prepare data
 initial_history_start_date = bundle.equity_daily_bar_reader.sessions[bundle.equity_daily_bar_reader.sessions < start_date_str][(-bootstrap_length - 1)]
