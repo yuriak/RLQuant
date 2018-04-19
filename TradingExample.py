@@ -179,4 +179,7 @@ trading_stategy = {
 
 model=DRL_Portfolio(asset_number=len(assets),feature_network_topology=network_topology,object_function='sortino',learning_rate=0.001)
 trader=AgentTrader(model=model,pre_defined_assets=assets,equity_data=equity_data,other_data=other_features,training_strategy=trading_stategy)
-trader.backtest(data)
+trained_model,actions,result=trader.backtest(data)
+trained_model.save_model()
+np.save('actions',actions)
+result.to_pickle('trading_result')
