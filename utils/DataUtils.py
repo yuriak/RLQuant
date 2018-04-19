@@ -133,10 +133,10 @@ def prepare_index_data(start_date,equity_reference_index=None,datapath='data/ind
     return index_data
 
 def prepare_news_data(reference_equity_data,data_path='data/news.csv'):
-    if not os.path.exists('trading_content'):
+    if not os.path.exists(data_path):
         return None
     else:
-        news_vec = pd.read_csv('trading_content')
+        news_vec = pd.read_csv(data_path)
         news_vec.index = news_vec.date
         news_vec = news_vec.drop('date', axis=1)
         news_vec = reference_equity_data[:, :, 'return_rate'].join(news_vec).drop(reference_equity_data.items, axis=1).fillna(0)
