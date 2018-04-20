@@ -8,8 +8,9 @@ import quandl
 
 quandl.ApiConfig.api_key = 'CTq2aKvtCkPPgR4L_NFs'
 
-
 z_score = lambda x: (x - x.mean(axis=0)) / x.std(axis=0)
+
+
 def generate_tech_data(stock, open_name, close_name, high_name, low_name):
     open_price = stock[open_name].values
     close_price = stock[close_name].values
@@ -48,8 +49,9 @@ def generate_tech_data(stock, open_name, close_name, high_name, low_name):
     data['NATR'] = talib.NATR(high_price, low_price, close_price)
     data['TRANGE'] = talib.TRANGE(high_price, low_price, close_price)
     data = data.drop([open_name, close_name, high_name, low_name], axis=1)
-    data = data.dropna()
+    data = data.dropna().astype(np.float32)
     return data
+
 
 def batch_nomorlize(f_data):
     need_normalize = f_data.columns[list(f_data.columns.map(lambda x: '_' in x))]
@@ -57,8 +59,7 @@ def batch_nomorlize(f_data):
     return z_score(f_data[need_normalize]).join(f_data[keep_original])
 
 
-def normalize_all(f_data):
-    return z_score(f_data)
+normalize_all = lambda x: (x - x.mean(axis=0)) / x.std(axis=0)
 
 
 def generate_stock_features(history_data):
@@ -72,7 +73,7 @@ def generate_stock_features(history_data):
         return_rate = pd.Series((stock_data['adj_close'] / stock_data['adj_close'].shift(1)).fillna(1), name='return_rate')
         tech_data = tech_data.join(return_rate)
         stock_features[c] = tech_data
-    return pd.Panel(stock_features)
+    return pd.Panel(stock_features).dropna()
 
 
 def generate_index_features(index_data):
@@ -84,7 +85,8 @@ def generate_index_features(index_data):
         return_rate = pd.Series((index['Last'] / index['Last'].shift(1)).fillna(1), name='return_rate')
         tech_data = tech_data.join(return_rate)
         index_features[c] = tech_data
-    return pd.Panel(index_features)
+    return pd.Panel(index_features).dropna()
+
 
 def prepare_equity_data(start_date, assets, data_path='data/equity_data'):
     if not os.path.exists(data_path):
@@ -95,15 +97,17 @@ def prepare_equity_data(start_date, assets, data_path='data/equity_data'):
             stock = quandl.get_table('WIKI/PRICES', date={'gte': str(start_date)}, ticker=s)
             stock.index = stock.date
             equity_data[s] = stock
-        equity_data = pd.Panel(equity_data)
+        equity_data = pd.Panel(equity_data).fillna(method='ffill').fillna(method='bfill')
         equity_data.to_pickle(data_path)
         equity_data = generate_stock_features(equity_data)
         print('Done')
     else:
         print('equity data exist')
-        equity_data = pd.read_pickle(data_path)
+        equity_data = pd.read_pickle(data_path).fillna(method='ffill').fillna(method='bfill')
         equity_data = generate_stock_features(equity_data)
+    assert np.sum(np.isnan(equity_data.values)) == 0
     return equity_data
+
 
 def prepare_index_data(start_date, equity_reference_index=None, data_path='data/index_data'):
     if not os.path.exists(data_path):
@@ -118,21 +122,23 @@ def prepare_index_data(start_date, equity_reference_index=None, data_path='data/
         vix = vix.drop('Date', axis=1)
         vix = vix.astype(np.float64)
         vix.columns = ['Open', 'High', 'Low', 'Last']
-        index_data = pd.Panel({'vix': vix, 'gc': gc, 'si': si, 'spy': spy})
+        index_data = pd.Panel({'vix': vix, 'gc': gc, 'si': si, 'spy': spy}).fillna(method='ffill').fillna(method='bfill')
         index_data.to_pickle(data_path)
         index_data = index_data[:, str(start_date):, :]
         index_data = generate_index_features(index_data)
         print('Done')
     else:
         print('index data exist')
-        index_data = pd.read_pickle(data_path)
+        index_data = pd.read_pickle(data_path).fillna(method='ffill').fillna(method='bfill')
         index_data = index_data[:, str(start_date):, :]
         index_data = generate_index_features(index_data)
     if equity_reference_index is not None:
-        index_data = generate_index_features(index_data)[:, equity_reference_index, :]
+        index_data = index_data[:, equity_reference_index, :]
+    assert np.sum(np.isnan(index_data.values)) == 0
     return index_data
 
-def prepare_news_data(reference_equity_data,data_path='data/news.csv'):
+
+def prepare_news_data(reference_equity_data, data_path='data/news.csv'):
     if not os.path.exists(data_path):
         return None
     else:
@@ -141,8 +147,9 @@ def prepare_news_data(reference_equity_data,data_path='data/news.csv'):
         news_vec = news_vec.drop('date', axis=1)
         news_vec = reference_equity_data[:, :, 'return_rate'].join(news_vec).drop(reference_equity_data.items, axis=1).fillna(0)
         return news_vec
-    
-def retrieve_equitys(bundle,assets):
-    sids=bundle.asset_finder.sids
-    all_assets=bundle.asset_finder.retrieve_all(sids)
-    return list(filter(lambda x:x.symbol in assets,all_assets))
+
+
+def retrieve_equitys(bundle, assets):
+    sids = bundle.asset_finder.sids
+    all_assets = bundle.asset_finder.retrieve_all(sids)
+    return list(filter(lambda x: x.symbol in assets, all_assets))

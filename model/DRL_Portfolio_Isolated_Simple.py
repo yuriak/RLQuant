@@ -76,21 +76,20 @@ class DRL_Portfolio(object):
         self.model_inputs = {}
         self.feature_outputs = []
         self.keep_output = None
-        self.concat_factor = []
         for k, v in feature_network_topology.items():
-            with tf.variable_scope(k, initializer=tf.contrib.layers.xavier_initializer(uniform=False)):
+            with tf.variable_scope(k, initializer=tf.contrib.layers.xavier_initializer(uniform=False), regularizer=tf.contrib.layers.l2_regularizer(0.01)):
                 X = tf.placeholder(dtype=tf.float32, shape=[v['feature_map_number'], None, v['feature_number']], name=v['input_name'])
                 self.model_inputs[k] = X
                 output = X
-                output = tl.layers.normalization.batch_normalization(X)
+                # output = tl.layers.normalization.batch_normalization(X)
                 if 'dense' in v:
-                    with tf.variable_scope(k + '/dense', initializer=tf.contrib.layers.xavier_initializer(uniform=False)):
+                    with tf.variable_scope(k + '/dense'):
                         dense_config = v['dense']
                         for n, a in zip(dense_config['n_units'], dense_config['act']):
                             output = self._add_dense_layer(output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
                             # output = tl.layers.normalization.batch_normalization(output)
                 if 'rnn' in v:
-                    with tf.variable_scope(k + '/rnn', initializer=tf.contrib.layers.xavier_initializer(uniform=False)):
+                    with tf.variable_scope(k + '/rnn'):
                         rnn_config = v['rnn']
                         rnn_cells = [self._add_letm_cell(i, a) for i, a in list(zip(rnn_config['n_units'], rnn_config['act']))]
                         layered_cell = tf.contrib.rnn.MultiRNNCell(rnn_cells)
@@ -100,6 +99,8 @@ class DRL_Portfolio(object):
                                                                      state_keep_prob=self.dropout_keep_prob,
                                                                      )
                         output, state = tf.nn.dynamic_rnn(cell=layered_cell, inputs=output, dtype=tf.float32)
+                        # output = tl.layers.normalization.batch_normalization(output)
+                        tf.summary.histogram(k + '/first_rnn_output', output)
                         if not v['keep_output']:
                             with tf.variable_scope(k + '/rnn/feature'):
                                 feature_rnn_cell = self._add_letm_cell(self.real_asset_number, activation=tf.nn.tanh)
@@ -109,6 +110,7 @@ class DRL_Portfolio(object):
                                                                                  state_keep_prob=self.dropout_keep_prob,
                                                                                  )
                                 feature_output, feature_state = tf.nn.dynamic_rnn(cell=feature_rnn_cell, inputs=output, dtype=tf.float32)
+                                tf.summary.histogram(k + '/feature_rnn_output', feature_output)
                                 feature_output = tf.unstack(feature_output, axis=0)
                             with tf.variable_scope(k + 'rnn/cash'):
                                 cash_rnn_cell = self._add_letm_cell(1, activation=None)
@@ -118,24 +120,22 @@ class DRL_Portfolio(object):
                                                                               state_keep_prob=self.dropout_keep_prob,
                                                                               )
                                 cash_output, cash_state = tf.nn.dynamic_rnn(cell=cash_rnn_cell, inputs=output, dtype=tf.float32)
+                                tf.summary.histogram(k + '/cash_rnn_output', cash_output)
                                 cash_output = tf.unstack(cash_output, axis=0)
                             if v['feature_map_number'] > 1:
                                 feature_output = tl.layers.merge(feature_output, mode='elemwise_sum')
+                                
                                 cash_output = tl.layers.merge(cash_output, mode='mean')
                                 cash_output = tf.expand_dims(cash_output, axis=1)
                             else:
                                 feature_output = feature_output[0]
                                 cash_output = cash_output[0]
-                                # cash_output = tf.expand_dims(cash_output,axis=1)
-                            feature_output = tf.concat((tf.zeros(shape=[1, feature_output.shape[1]]), feature_output), axis=0)
-                            cash_output = tf.concat((tf.zeros(shape=[1, cash_output.shape[1]]), cash_output), axis=0)
                             self.feature_outputs.append((feature_output, cash_output))
                         else:
                             output = tf.unstack(output, axis=0)
                             output = tl.layers.merge(output, mode='concat')
-                            output = tf.concat((tf.zeros(shape=[1, output.shape[1]]), output), axis=0)
-                            self.keep_output = output
                             # output = tl.layers.normalization.batch_normalization(output)
+                            self.keep_output = output
         with tf.name_scope('merge'):
             if len(self.feature_outputs) > 1:
                 feature_maps = list(map(lambda x: x[0], self.feature_outputs))
@@ -146,13 +146,16 @@ class DRL_Portfolio(object):
             else:
                 feature_maps = self.feature_outputs[0][0]
                 cash_maps = self.feature_outputs[0][1]
+            tf.summary.histogram('cash_map', cash_maps)
+            tf.summary.histogram('feature_map', feature_maps)
             self.keep_output = tl.layers.merge([self.keep_output, cash_maps], mode='concat')
             self.keep_output = tl.layers.merge([self.keep_output, feature_maps], mode='elemwise_sum')
-        with tf.variable_scope('action', initializer=tf.contrib.layers.xavier_initializer(uniform=False)):
+            tf.summary.histogram('keep_output', self.keep_output)
+        with tf.variable_scope('action'):
             self.action = self.keep_output
             self.action = self.action / self.tao
             self.action = tf.nn.softmax(self.action)
-            tf.summary.histogram('action', self.action)
+            self.action = tf.concat([tf.nn.softmax(tf.ones(shape=[1, self.action.shape[1]])), self.action], axis=0)
         with tf.variable_scope('reward'):
             self.reward_t = tf.reduce_sum(self.z * self.action[:-1] - self.c * tf.abs(self.action[1:] - self.action[:-1]), axis=1)
             self.log_reward_t = tf.log(self.reward_t)
@@ -161,22 +164,25 @@ class DRL_Portfolio(object):
             self.mean_log_reward = tf.reduce_mean(self.log_reward_t)
             self.sortino = self._sortino_ratio(self.log_reward_t, 0)
             self.sharpe = self._sharpe_ratio(self.log_reward_t, 0)
-            tf.summary.histogram('reward_t',self.reward_t)
+        
         with tf.variable_scope('train'):
-            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+            optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate)
             if object_function == 'reward':
                 self.train_op = optimizer.minimize(-self.mean_log_reward)
             elif object_function == 'sharpe':
                 self.train_op = optimizer.minimize(-self.sharpe)
             else:
                 self.train_op = optimizer.minimize(-self.sortino)
+        
         for var in tf.trainable_variables():
             tf.summary.histogram(var.op.name, var)
-        self.merge_op = tf.summary.merge_all()
-        self.init_op = tf.global_variables_initializer()
-        self.saver = tf.train.Saver()
+        tf.summary.histogram('action', self.action)
+        tf.summary.histogram('reward_t', self.reward_t)
+        tf.summary.histogram('equity_base', self.keep_output)
         self.session = tf.Session()
-        
+        self.saver = tf.train.Saver()
+        self.init_op = tf.global_variables_initializer()
+        self.merge_op = tf.summary.merge_all()
     
     def init_model(self):
         self.session.run(self.init_op)
