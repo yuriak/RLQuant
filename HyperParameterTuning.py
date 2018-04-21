@@ -54,7 +54,7 @@ taos = [5.0, 10.0]
 attention_length = [5,10]
 network_plan=[
     ([128],[64]),
-    ([256,128],[64,32])
+    ([256,128],[64,32]),
     ([512,256,128],[128,64])
 ]
 object_function=['reward','sortino']
@@ -130,7 +130,7 @@ for d,r in network_plan:
                                 'keep_prob':0.85,
                             }
                         }
-                        for k, v in networks:
+                        for k, v in networks.items():
                             template = v
                             if k == 'equity_network':
                                 template['dense'] = {
@@ -138,7 +138,7 @@ for d,r in network_plan:
                                     'act': [act]*len(d)
                                 }
                                 template['rnn'] = {
-                                    'u_units': r + [1],
+                                    'n_units': r + [1],
                                     'act': [act]*len(r) + [None],
                                     'attention_length': attn
                                 }
@@ -148,21 +148,23 @@ for d,r in network_plan:
                                     'act': [act]*len(d)
                                 }
                                 template['rnn'] = {
-                                    'u_units': r,
+                                    'n_units': r,
                                     'act': [act]*len(r),
                                     'attention_length': attn
                                 }
                             network_topology[k] = template
                         hyper_parameters.append((network_topology,training_strategy,o))
 
-
-os.mkdir('./experiment')
+if not os.path.exists('./experiment'):
+    os.mkdir('./experiment')
 
 for i,h in enumerate(hyper_parameters):
     result_dir = './experiment/result%d' % i
     model_dir = result_dir + '/model'
-    os.mkdir(result_dir)
-    os.mkdir(model_dir)
+    if not os.path.exists(result_dir):
+        os.mkdir(result_dir)
+    if not os.path.exists(model_dir):
+        os.mkdir(model_dir)
     topology=h[0]
     strategy=h[1]
     o_function=h[2]
