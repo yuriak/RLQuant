@@ -77,7 +77,7 @@ class DRL_Portfolio(object):
         self.feature_outputs = []
         self.keep_output = None
         for k, v in feature_network_topology.items():
-            with tf.variable_scope(k, initializer=tf.contrib.layers.xavier_initializer(uniform=False), regularizer=tf.contrib.layers.l2_regularizer(0.01)):
+            with tf.variable_scope(k, initializer=tf.contrib.layers.xavier_initializer(uniform=False), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
                 X = tf.placeholder(dtype=tf.float32, shape=[v['feature_map_number'], None, v['feature_number']], name=v['input_name'])
                 self.model_inputs[k] = X
                 output = X
@@ -116,7 +116,7 @@ class DRL_Portfolio(object):
                                 tf.summary.histogram(k + '/feature_rnn_output', feature_output)
                                 feature_output = tf.unstack(feature_output, axis=0)
                             with tf.variable_scope(k + 'rnn/cash'):
-                                cash_rnn_cell = self._add_letm_cell(1, activation=None)
+                                cash_rnn_cell = self._add_letm_cell(1, activation=tf.nn.sigmoid)
                                 if 'attention_length' in rnn_config.keys():
                                     cash_rnn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=cash_rnn_cell, attn_length=rnn_config['attention_length'])
                                 cash_rnn_cell = tf.contrib.rnn.DropoutWrapper(cash_rnn_cell,

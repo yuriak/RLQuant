@@ -53,7 +53,7 @@ from utils.ZiplineTensorboard import TensorBoard
 
 
 class AgentTrader(TradingAlgorithm):
-    def __init__(self, model, pre_defined_assets, equity_data, other_data, training_strategy, pre_trained_model_path=None, name='backtest', transaction_cost=0.005, *args, **kwargs):
+    def __init__(self, model, pre_defined_assets, equity_data, other_data, training_strategy, pre_trained_model_path=None, name='backtest',log_interval=1, transaction_cost=0.005, *args, **kwargs):
         TradingAlgorithm.__init__(self, *args, **kwargs)
         self.model = model
         self.assets = pre_defined_assets
@@ -62,6 +62,7 @@ class AgentTrader(TradingAlgorithm):
         self.other_training_data = other_data
         self.equity_data = equity_data
         self.log_dir = 'log/' + name
+        self.log_interval=log_interval
         self.real_return = []
         self.history_weight = []
         if pre_trained_model_path==None:
@@ -156,12 +157,13 @@ class AgentTrader(TradingAlgorithm):
         self.real_return.append(self.portfolio.returns + 1)
         self.history_weight.append(today_action)
         self.backtest_action_record.append(today_action)
-        record(invest_weight=np.sum(today_action))
-        record(predict_reward=cum_reward.ravel()[0])
         holding_securities = dict(filter(lambda x: x[1] > 0.05, list(zip(self.assets, today_action))))
-        record(large_holding=len(holding_securities))
-        model_summary = self.model.get_summary(feed)
-        self.tensorboard.log_algo(self, model_summaries=model_summary, epoch=self.day)
+        if self.day % self.log_interval==0:
+            record(invest_weight=np.sum(today_action))
+            record(predict_reward=cum_reward.ravel()[0])
+            record(large_holding=len(holding_securities))
+            model_summary = self.model.get_summary(feed)
+            self.tensorboard.log_algo(self, model_summaries=model_summary, epoch=self.day)
         print('actual return', self.portfolio.returns + 1, 'expect return:', cum_reward, 'on', str(trading_date))
         print(holding_securities)
         print('=' * 100)

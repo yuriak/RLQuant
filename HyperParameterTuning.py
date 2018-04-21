@@ -23,7 +23,7 @@ if not os.path.exists('sp500.csv'):
         f.write(response.content)
 sp500 = pd.read_csv('sp500.csv')
 sp500.index = sp500['Symbol']
-high_cap_company = sp500.loc[list(itertools.chain.from_iterable(list(map(lambda x: x[1][-5:], list(sp500.sort_values('Market Cap').groupby('Sector').groups.items())))))]
+high_cap_company = sp500.loc[list(itertools.chain.from_iterable(list(map(lambda x: x[1][:5], list(sp500.sort_values('Market Cap').groupby('Sector').groups.items())))))]
 assets = list(high_cap_company.Symbol.values)
 assets = retrieve_equitys(bundle, assets)
 
@@ -139,7 +139,7 @@ for d,r in network_plan:
                                 }
                                 template['rnn'] = {
                                     'n_units': r + [1],
-                                    'act': [act]*len(r) + [None],
+                                    'act': [act]*len(r) + [tf.nn.sigmoid],
                                     'attention_length': attn
                                 }
                             else:
@@ -183,9 +183,10 @@ for i,h in enumerate(hyper_parameters):
     try:
         trained_model,actions,result=trader.backtest(data)
         trained_model.save_model(model_dir)
-        np.save(result_dir+'/action')
+        np.save(result_dir+'/action',actions)
         result.to_pickle(result_dir+'/result')
-        pickle.dump({'topology':topology,'strategy':strategy,'object':o_function},result_dir+'/hyper_parameter')
+        with open(result_dir + '/hyper_parameter','wb+') as f:
+            pickle.dump({'topology':topology,'strategy':strategy,'object':o_function},file=f)
     except Exception as e:
         print(e.message)
         continue

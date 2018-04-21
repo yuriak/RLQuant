@@ -9,9 +9,9 @@ from zipline.data.data_portal import DataPortal
 import pandas as pd
 import re
 
-def build_backtest_environment(star_date, end_date):
+def build_backtest_environment(star_date, end_date,capital_base=100000):
     trading_calendar = get_calendar("NYSE")
-    sim_params = create_simulation_parameters(capital_base=10000,
+    sim_params = create_simulation_parameters(capital_base=capital_base,
                                               data_frequency='daily',
                                               trading_calendar=trading_calendar,
                                               start=pd.Timestamp(pd.to_datetime(star_date)).tz_localize('US/Eastern'),
