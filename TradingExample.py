@@ -1,27 +1,16 @@
 # -*- coding:utf-8 -*-
 import re
 import tensorflow as tf
-import pandas as pd
-import numpy as np
+
 import requests
 import itertools
-import os
-import quandl
+
 from zipline.data import bundles
 from zipline.utils.calendars import get_calendar
 from zipline.finance.trading import TradingEnvironment
 from zipline.utils.factory import create_simulation_parameters
 from zipline.data.data_portal import DataPortal
-from zipline.api import (
-    attach_pipeline,
-    pipeline_output,
-    record,
-    schedule_function,
-    symbol,
-    get_datetime,
-    order,
-    order_target_percent
-)
+
 from trading_environment.Trader import AgentTrader
 from model.DRL_Portfolio_Isolated_Simple import DRL_Portfolio
 from utils.DataUtils import *

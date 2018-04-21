@@ -93,17 +93,20 @@ class DRL_Portfolio(object):
                         rnn_config = v['rnn']
                         rnn_cells = [self._add_letm_cell(i, a) for i, a in list(zip(rnn_config['n_units'], rnn_config['act']))]
                         layered_cell = tf.contrib.rnn.MultiRNNCell(rnn_cells)
+                        if 'attention_length' in rnn_config.keys():
+                            layered_cell = tf.contrib.rnn.AttentionCellWrapper(cell=layered_cell, attn_length=rnn_config['attention_length'])
                         layered_cell = tf.contrib.rnn.DropoutWrapper(layered_cell,
                                                                      input_keep_prob=self.dropout_keep_prob,
                                                                      output_keep_prob=self.dropout_keep_prob,
                                                                      state_keep_prob=self.dropout_keep_prob,
                                                                      )
                         output, state = tf.nn.dynamic_rnn(cell=layered_cell, inputs=output, dtype=tf.float32)
-                        # output = tl.layers.normalization.batch_normalization(output)
                         tf.summary.histogram(k + '/first_rnn_output', output)
                         if not v['keep_output']:
                             with tf.variable_scope(k + '/rnn/feature'):
                                 feature_rnn_cell = self._add_letm_cell(self.real_asset_number, activation=tf.nn.tanh)
+                                if 'attention_length' in rnn_config.keys():
+                                    feature_rnn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=feature_rnn_cell, attn_length=rnn_config['attention_length'])
                                 feature_rnn_cell = tf.contrib.rnn.DropoutWrapper(feature_rnn_cell,
                                                                                  input_keep_prob=self.dropout_keep_prob,
                                                                                  output_keep_prob=self.dropout_keep_prob,
@@ -114,6 +117,8 @@ class DRL_Portfolio(object):
                                 feature_output = tf.unstack(feature_output, axis=0)
                             with tf.variable_scope(k + 'rnn/cash'):
                                 cash_rnn_cell = self._add_letm_cell(1, activation=None)
+                                if 'attention_length' in rnn_config.keys():
+                                    cash_rnn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=cash_rnn_cell, attn_length=rnn_config['attention_length'])
                                 cash_rnn_cell = tf.contrib.rnn.DropoutWrapper(cash_rnn_cell,
                                                                               input_keep_prob=self.dropout_keep_prob,
                                                                               output_keep_prob=self.dropout_keep_prob,
@@ -243,8 +248,8 @@ class DRL_Portfolio(object):
     def train(self, feed):
         self.session.run([self.train_op], feed_dict=feed)
     
-    def load_model(self, model_file='./trade_model_checkpoint/trade_model'):
-        self.saver.restore(self.session, model_file)
+    def load_model(self, model_file='./trade_model_checkpoint'):
+        self.saver.restore(self.session, model_file+'/trade_model')
     
     def save_model(self, model_path='./trade_model_checkpoint'):
         if not os.path.exists(model_path):

@@ -53,7 +53,7 @@ from utils.ZiplineTensorboard import TensorBoard
 
 
 class AgentTrader(TradingAlgorithm):
-    def __init__(self, model, pre_defined_assets, equity_data, other_data, training_strategy, name='backtest', transaction_cost=0.005, *args, **kwargs):
+    def __init__(self, model, pre_defined_assets, equity_data, other_data, training_strategy, pre_trained_model_path=None, name='backtest', transaction_cost=0.005, *args, **kwargs):
         TradingAlgorithm.__init__(self, *args, **kwargs)
         self.model = model
         self.assets = pre_defined_assets
@@ -64,7 +64,10 @@ class AgentTrader(TradingAlgorithm):
         self.log_dir = 'log/' + name
         self.real_return = []
         self.history_weight = []
-        self.model.init_model()
+        if pre_trained_model_path==None:
+            self.model.init_model()
+        else:
+            self.model.load_model(pre_trained_model_path)
         self.day = 1
         self.backtest_action_record = []
         self.tensorboard = TensorBoard(log_dir=self.log_dir, session=self.model.get_session())
@@ -132,6 +135,20 @@ class AgentTrader(TradingAlgorithm):
                                           fee=self.transaction_cost,
                                           keep_prob=1.0,
                                           tao=self.training_strategy['tao'])
+        
+        # self.model.train(feed)
+        # if self.day >30:
+        # =====================================================================================
+        # Conduct shor term training, for example, daily update model
+        if 'short_term' in self.training_strategy.keys():
+            training_strategy = self.training_strategy['short_term']
+            if self.day % training_strategy['interval'] == 0:
+                feed = self.model.change_drop_keep_prob(feed, training_strategy['keep_prob'])
+                for _ in range(training_strategy['max_epoch']):
+                    self.model.train(feed)
+                    
+        # ==================================================================================================
+        # Execute Orders
         rewards, cum_log_reward, cum_reward, actions = self.model.trade(feed)
         today_action = np.nan_to_num(actions[-1].flatten())
         for k, asset in enumerate(self.assets):
@@ -148,16 +165,7 @@ class AgentTrader(TradingAlgorithm):
         print('actual return', self.portfolio.returns + 1, 'expect return:', cum_reward, 'on', str(trading_date))
         print(holding_securities)
         print('=' * 100)
-        # self.model.train(feed)
-        # if self.day >30:
-        # =====================================================================================
-        # Conduct shor term training, for example, daily update model
-        if 'short_term' in self.training_strategy.keys():
-            training_strategy = self.training_strategy['short_term']
-            if self.day % training_strategy['interval'] == 0:
-                feed = self.model.change_drop_keep_prob(feed, training_strategy['keep_prob'])
-                for _ in range(training_strategy['max_epoch']):
-                    self.model.train(feed)
+        
         # =======================================================================================
         # Conduct long term training, for example, monthly update model
         if 'long_term' in self.training_strategy.keys():
@@ -166,14 +174,10 @@ class AgentTrader(TradingAlgorithm):
                 feed = self.model.change_drop_keep_prob(feed, training_strategy['keep_prob'])
                 rewards, cum_log_reward, cum_reward, actions = self.model.trade(feed)
                 epoch = 0
-                while cum_reward < training_strategy['target_reward'] and epoch < training_strategy['max_epoch']:
+                while epoch < training_strategy['max_epoch']:
                     self.model.train(feed)
                     rewards, cum_log_reward, cum_reward, actions = self.model.trade(feed)
                     epoch += 1
-        
-        # ==================================================================================================
-        # Execute Orders
-        
         self.day += 1
     
     def backtest(self, data):
