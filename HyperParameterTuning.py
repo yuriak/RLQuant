@@ -181,12 +181,12 @@ for i,h in enumerate(hyper_parameters):
         env=env
     )
     try:
+        with open(result_dir + '/hyper_parameter', 'wb+') as f:
+            pickle.dump({'topology': topology, 'strategy': strategy, 'object': o_function}, file=f)
         trained_model,actions,result=trader.backtest(data)
         trained_model.save_model(model_dir)
         np.save(result_dir+'/action',actions)
         result.to_pickle(result_dir+'/result')
-        with open(result_dir + '/hyper_parameter','wb+') as f:
-            pickle.dump({'topology':topology,'strategy':strategy,'object':o_function},file=f)
     except Exception as e:
         print(e.message)
         continue
