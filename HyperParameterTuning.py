@@ -50,14 +50,14 @@ assert equity_data.major_axis[0] == index_data.major_axis[0]
 # Start the backtest
 # Step 1. define the hyper-parameter combination
 training_sequence_length = [30, 60, 100, 150, None]
-taos = [5.0, 10.0]
-attention_length = [5,10]
-network_plan=[
-    ([128],[64]),
-    ([256,128],[64,32]),
-    ([512,256,128],[128,64])
+taos = [1.0, 5.0]
+attention_length = [5, 10]
+network_plan = [
+    ([128], [64]),
+    ([256, 128], [64, 32]),
+    ([512, 256, 128], [128, 64])
 ]
-object_function=['reward','sortino']
+object_function = ['reward', 'sortino']
 
 equity_network_template = {
     'feature_map_number': len(assets),
@@ -79,55 +79,55 @@ news_network_template = {
     'keep_output': False
 }
 
-weight_network_template={
+weight_network_template = {
     'feature_map_number': 1,
     'feature_number': len(assets) + 1,
     'input_name': 'weight',
     'keep_output': False
 }
-return_network_template={
+return_network_template = {
     'feature_map_number': 1,
     'feature_number': 1,
     'input_name': 'return',
     'keep_output': False
 }
-networks={
-    'equity_network':equity_network_template,
-    'weight_network':weight_network_template,
-    'return_network':return_network_template,
-    'index_network':index_network_template,
-    'news_network':news_network_template
+networks = {
+    'equity_network': equity_network_template,
+    'weight_network': weight_network_template,
+    'return_network': return_network_template,
+    'index_network': index_network_template,
+    'news_network': news_network_template
 }
 other_features = {
-    'index_network':{
-        'data':index_data,
-        'normalize':True
+    'index_network': {
+        'data': index_data,
+        'normalize': True
     },
-    'news_network':{
-        'data':news_data,
-        'normalize':False
+    'news_network': {
+        'data': news_data,
+        'normalize': False
     }
 }
-hyper_parameters=[]
-for d,r in network_plan:
-    for act in [tf.nn.relu,tf.nn.tanh]:
+hyper_parameters = []
+for d, r in network_plan:
+    for act in [tf.nn.relu, tf.nn.tanh]:
         for attn in attention_length:
             for tao in taos:
                 for sequence_length in training_sequence_length:
                     for o in object_function:
                         network_topology = {}
-                        training_strategy={
-                            'training_data_length':sequence_length,
-                            'tao':tao,
-                            'short_term':{
-                                'interval':1,
-                                'max_epoch':1,
-                                'keep_prob':1.0
+                        training_strategy = {
+                            'training_data_length': sequence_length,
+                            'tao': tao,
+                            'short_term': {
+                                'interval': 1,
+                                'max_epoch': 1,
+                                'keep_prob': 1.0
                             },
-                            'long_term':{
-                                'interval':30,
-                                'max_epoch':10,
-                                'keep_prob':0.85,
+                            'long_term': {
+                                'interval': 30,
+                                'max_epoch': 10,
+                                'keep_prob': 0.85,
                             }
                         }
                         for k, v in networks.items():
@@ -135,41 +135,41 @@ for d,r in network_plan:
                             if k == 'equity_network':
                                 template['dense'] = {
                                     'n_units': d,
-                                    'act': [act]*len(d)
+                                    'act': [act] * len(d)
                                 }
                                 template['rnn'] = {
                                     'n_units': r + [1],
-                                    'act': [act]*len(r) + [tf.nn.sigmoid],
+                                    'act': [act] * len(r) + [tf.nn.sigmoid],
                                     'attention_length': attn
                                 }
                             else:
                                 template['dense'] = {
                                     'n_units': d,
-                                    'act': [act]*len(d)
+                                    'act': [act] * len(d)
                                 }
                                 template['rnn'] = {
                                     'n_units': r,
-                                    'act': [act]*len(r),
+                                    'act': [act] * len(r),
                                     'attention_length': attn
                                 }
                             network_topology[k] = template
-                        hyper_parameters.append((network_topology,training_strategy,o))
+                        hyper_parameters.append((network_topology, training_strategy, o))
 
 if not os.path.exists('./experiment'):
     os.mkdir('./experiment')
 
-for i,h in enumerate(hyper_parameters):
+for i, h in enumerate(hyper_parameters):
     result_dir = './experiment/result%d' % i
     model_dir = result_dir + '/model'
     if not os.path.exists(result_dir):
         os.mkdir(result_dir)
     if not os.path.exists(model_dir):
         os.mkdir(model_dir)
-    topology=h[0]
-    strategy=h[1]
-    o_function=h[2]
-    model=DRL_Portfolio(asset_number=len(assets),feature_network_topology=topology,object_function=o_function,learning_rate=0.001)
-    trader=AgentTrader(
+    topology = h[0]
+    strategy = h[1]
+    o_function = h[2]
+    model = DRL_Portfolio(asset_number=len(assets), feature_network_topology=topology, object_function=o_function, learning_rate=0.001)
+    trader = AgentTrader(
         model=model,
         pre_defined_assets=assets,
         equity_data=equity_data,
@@ -177,18 +177,16 @@ for i,h in enumerate(hyper_parameters):
         training_strategy=strategy,
         sim_params=sim_params,
         pre_trained_model_path=None,
-        name='backtest_%d'%(i),
+        name='backtest_%d' % (i),
         env=env
     )
     try:
         with open(result_dir + '/hyper_parameter', 'wb+') as f:
             pickle.dump({'topology': topology, 'strategy': strategy, 'object': o_function}, file=f)
-        trained_model,actions,result=trader.backtest(data)
+        trained_model, actions, result = trader.backtest(data)
         trained_model.save_model(model_dir)
-        np.save(result_dir+'/action',actions)
-        result.to_pickle(result_dir+'/result')
+        np.save(result_dir + '/action', actions)
+        result.to_pickle(result_dir + '/result')
     except Exception as e:
         print(e.message)
         continue
-    
-    
