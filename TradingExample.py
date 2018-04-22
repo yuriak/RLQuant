@@ -14,28 +14,13 @@ from zipline.data.data_portal import DataPortal
 from trading_environment.Trader import AgentTrader
 from model.DRL_Portfolio_Isolated_Simple import DRL_Portfolio
 from utils.DataUtils import *
+from utils.EnvironmentUtils import *
 
 start_date_str = '2005-02-08'
 end_date_str = '2018-03-27'
+capital_base=100000
 bootstrap_length = 300
-trading_calendar = get_calendar("NYSE")
-sim_params = create_simulation_parameters(capital_base=10000,
-                                          data_frequency='daily',
-                                          trading_calendar=trading_calendar,
-                                          start=pd.Timestamp(pd.to_datetime(start_date_str)).tz_localize('US/Eastern'),
-                                          end=pd.Timestamp(pd.to_datetime(end_date_str)).tz_localize('US/Eastern')
-                                          )
-bundle = bundles.load('quandl')
-prefix, connstr = re.split(r'sqlite:///', str(bundle.asset_finder.engine.url), maxsplit=1, )
-env = TradingEnvironment(asset_db_path=connstr, environ=os.environ)
-data = DataPortal(
-    env.asset_finder, trading_calendar,
-    first_trading_day=bundle.equity_minute_bar_reader.first_trading_day,
-    equity_minute_reader=bundle.equity_minute_bar_reader,
-    equity_daily_reader=bundle.equity_daily_bar_reader,
-    adjustment_reader=bundle.adjustment_reader,
-)
-
+data, env, bundle, sim_params=build_backtest_environment(start_date_str,end_date_str,capital_base=capital_base)
 # =========================================
 # load security pool
 if not os.path.exists('sp500.csv'):
@@ -45,7 +30,7 @@ if not os.path.exists('sp500.csv'):
         f.write(response.content)
 sp500 = pd.read_csv('sp500.csv')
 sp500.index = sp500['Symbol']
-high_cap_company = sp500.loc[list(itertools.chain.from_iterable(list(map(lambda x: x[1][-5:], list(sp500.sort_values('Market Cap').groupby('Sector').groups.items())))))]
+high_cap_company = sp500.loc[list(itertools.chain.from_iterable(list(map(lambda x: x[1][:5], list(sp500.sort_values('Market Cap').groupby('Sector').groups.items())))))]
 assets = list(high_cap_company.Symbol.values)
 assets = retrieve_equitys(bundle, assets)
 # =========================================
@@ -74,11 +59,11 @@ network_topology = {
         'input_name': 'equity',
         'dense': {
             'n_units': [128, 64],
-            'act': [tf.nn.relu] * 2,
+            'act': [tf.nn.tanh] * 2,
         },
         'rnn': {
             'n_units': [32, 1],
-            'act': [tf.nn.relu, None],
+            'act': [tf.nn.tanh, tf.nn.sigmoid],
             'attention_length': 10
         },
         'keep_output': True
@@ -89,11 +74,11 @@ network_topology = {
         'input_name': 'index',
         'dense': {
             'n_units': [128, 64],
-            'act': [tf.nn.relu] * 2,
+            'act': [tf.nn.tanh] * 2,
         },
         'rnn': {
             'n_units': [32, 16],
-            'act': [tf.nn.relu, tf.nn.relu],
+            'act': [tf.nn.tanh, tf.nn.tanh],
             'attention_length': 10
         },
         'keep_output': False
@@ -104,11 +89,11 @@ network_topology = {
         'input_name': 'weight',
         'dense': {
             'n_units': [32, 16],
-            'act': [tf.nn.relu] * 2,
+            'act': [tf.nn.tanh] * 2,
         },
         'rnn': {
             'n_units': [16, 8],
-            'act': [tf.nn.relu, tf.nn.relu],
+            'act': [tf.nn.tanh, tf.nn.tanh],
             'attention_length': 10
         },
         'keep_output': False
@@ -119,11 +104,11 @@ network_topology = {
         'input_name': 'return',
         'dense': {
             'n_units': [8, 4],
-            'act': [tf.nn.relu] * 2,
+            'act': [tf.nn.tanh] * 2,
         },
         'rnn': {
             'n_units': [2, 1],
-            'act': [tf.nn.relu, tf.nn.relu],
+            'act': [tf.nn.tanh, tf.nn.tanh],
             'attention_length': 10
         },
         'keep_output': False
@@ -157,17 +142,17 @@ other_features = {
 }
 
 training_strategy = {
-    'training_data_length': 10,
+    'training_data_length': 30,
     'tao': 5.0,
     'short_term': {
         'interval': 1,
         'max_epoch': 1,
-        'keep_prob': 0.95,
+        'keep_prob': 1.0,
     },
     'long_term': {
-        'interval': 10,
+        'interval': 30,
         'max_epoch': 10,
-        'keep_prob': 0.8,
+        'keep_prob': 0.85,
         'target_reward': 1.2
     }
 }

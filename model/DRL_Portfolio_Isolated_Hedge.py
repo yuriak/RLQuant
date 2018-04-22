@@ -81,14 +81,14 @@ class DRL_Portfolio(object):
                 X = tf.placeholder(dtype=tf.float32, shape=[v['feature_map_number'], None, v['feature_number']], name=v['input_name'])
                 self.model_inputs[k] = X
                 # output = tl.layers.normalization.batch_normalization(X)
-                output = X
+                output=X
                 if 'dense' in v:
                     with tf.variable_scope(k + '/dense', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
                         dense_config = v['dense']
                         for n, a in zip(dense_config['n_units'], dense_config['act']):
                             output = self._add_dense_layer(output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
                             # output = tl.layers.normalization.batch_normalization(output)
-                        tf.summary.histogram(k + '/dense_output', output)
+                        tf.summary.histogram(k+'/dense_output',output)
                 if 'rnn' in v:
                     with tf.variable_scope(k + '/rnn', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
                         rnn_config = v['rnn']
@@ -129,25 +129,25 @@ class DRL_Portfolio(object):
                                 tf.summary.histogram(k + '/cash_rnn_output', cash_output)
                                 cash_output = tf.unstack(cash_output, axis=0)
                             if v['feature_map_number'] > 1:
-                                feature_output = tl.layers.merge(feature_output, mode='elemwise_sum') / v['feature_map_number']
-                                cash_output = tl.layers.merge(cash_output, mode='elemwise_sum') / v['feature_map_number']
+                                feature_output = tl.layers.merge(feature_output, mode='elemwise_sum')/v['feature_map_number']
+                                cash_output = tl.layers.merge(cash_output, mode='elemwise_sum')/ v['feature_map_number']
                             else:
                                 feature_output = feature_output[0]
                                 cash_output = cash_output[0]
                             self.feature_outputs.append((feature_output, cash_output))
                         else:
                             output = tf.unstack(output, axis=0)
-                            if len(output) > 1:
+                            if len(output)>1:
                                 output = tl.layers.merge(output, mode='concat')
                             else:
-                                output = output[0]
+                                output=output[0]
                             # output = tl.layers.normalization.batch_normalization(output)
                             self.keep_output = output
         with tf.name_scope('merge'):
             if len(self.feature_outputs) > 1:
                 feature_maps = list(map(lambda x: x[0], self.feature_outputs))
                 cash_maps = list(map(lambda x: x[1], self.feature_outputs))
-                feature_maps = tl.layers.merge(feature_maps, mode='elemwise_sum') / len(self.feature_outputs)
+                feature_maps = tl.layers.merge(feature_maps, mode='elemwise_sum')/len(self.feature_outputs)
                 cash_maps = tl.layers.merge(cash_maps, mode='elemwise_sum') / len(self.feature_outputs)
             else:
                 feature_maps = self.feature_outputs[0][0]
@@ -249,7 +249,7 @@ class DRL_Portfolio(object):
         self.session.run([self.train_op], feed_dict=feed)
     
     def load_model(self, model_file='./trade_model_checkpoint'):
-        self.saver.restore(self.session, model_file + '/trade_model')
+        self.saver.restore(self.session, model_file+'/trade_model')
     
     def save_model(self, model_path='./trade_model_checkpoint'):
         if not os.path.exists(model_path):
