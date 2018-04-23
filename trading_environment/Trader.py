@@ -53,7 +53,7 @@ from utils.ZiplineTensorboard import TensorBoard
 
 
 class AgentTrader(TradingAlgorithm):
-    def __init__(self, model, pre_defined_assets, equity_data, other_data, training_strategy, pre_trained_model_path=None, name='backtest',log_interval=1, transaction_cost=0.005, *args, **kwargs):
+    def __init__(self, model, pre_defined_assets, equity_data, other_data, training_strategy, pre_trained_model_path=None, name='backtest', log_interval=1, transaction_cost=0.005, *args, **kwargs):
         TradingAlgorithm.__init__(self, *args, **kwargs)
         self.model = model
         self.assets = pre_defined_assets
@@ -62,10 +62,10 @@ class AgentTrader(TradingAlgorithm):
         self.other_training_data = other_data
         self.equity_data = equity_data
         self.log_dir = 'log/' + name
-        self.log_interval=log_interval
+        self.log_interval = log_interval
         self.real_return = []
         self.history_weight = []
-        if pre_trained_model_path==None:
+        if pre_trained_model_path == None:
             self.model.init_model()
         else:
             self.model.load_model(pre_trained_model_path)
@@ -88,7 +88,7 @@ class AgentTrader(TradingAlgorithm):
             equity_features = self.equity_data[:, :str(trading_date), :][:, :-1, :]
         print(equity_features.major_axis[0], equity_features.major_axis[-1])
         if self.day == 1:
-            real_return = np.ones(equity_features.shape[1])
+            real_return = np.zeros(equity_features.shape[1])
             self.real_return = list(real_return)
         else:
             real_return = np.array(self.real_return)[-equity_features.shape[1]:]
@@ -147,19 +147,19 @@ class AgentTrader(TradingAlgorithm):
                 feed = self.model.change_drop_keep_prob(feed, training_strategy['keep_prob'])
                 for _ in range(training_strategy['max_epoch']):
                     self.model.train(feed)
-                    
+        
         # ==================================================================================================
         # Execute Orders
         rewards, cum_log_reward, cum_reward, actions = self.model.trade(feed)
         today_action = np.nan_to_num(actions[-1].flatten())
         for k, asset in enumerate(self.assets):
             order_target_percent(asset, today_action[k])
-        self.real_return.append(self.portfolio.returns + 1)
+        self.real_return.append((self.portfolio.returns - self.real_return[-1]))
         self.history_weight.append(today_action)
         self.backtest_action_record.append(today_action)
-        holding_securities = dict(filter(lambda x: x[1] > 0.05, list(zip(self.assets, today_action))))
-        if self.day % self.log_interval==0:
-            record(invest_weight=np.sum(today_action))
+        holding_securities = dict(filter(lambda x: x[1] > 0.05 or x[1] < -0.05, list(zip(self.assets, today_action))))
+        if self.day % self.log_interval == 0:
+            record(invest_weight=np.sum(np.abs(today_action[:-1])))
             record(predict_reward=cum_reward.ravel()[0])
             record(large_holding=len(holding_securities))
             model_summary = self.model.get_summary(feed)

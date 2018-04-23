@@ -80,8 +80,9 @@ class DRL_Portfolio(object):
             with tf.variable_scope(k, initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
                 X = tf.placeholder(dtype=tf.float32, shape=[v['feature_map_number'], None, v['feature_number']], name=v['input_name'])
                 self.model_inputs[k] = X
-                # output = tl.layers.normalization.batch_normalization(X)
-                output = X
+                output = tl.layers.normalization.batch_normalization(X, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.9, stddev=0.002, name='InputBatchNormalization')
+                # output = X
+                tf.summary.histogram(k+'/input',output)
                 if 'dense' in v:
                     with tf.variable_scope(k + '/dense', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
                         dense_config = v['dense']
@@ -94,8 +95,8 @@ class DRL_Portfolio(object):
                         rnn_config = v['rnn']
                         rnn_cells = [self._add_letm_cell(i, a) for i, a in list(zip(rnn_config['n_units'], rnn_config['act']))]
                         layered_cell = tf.contrib.rnn.MultiRNNCell(rnn_cells)
-                        if 'attention_length' in rnn_config.keys():
-                            layered_cell = tf.contrib.rnn.AttentionCellWrapper(cell=layered_cell, attn_length=rnn_config['attention_length'])
+                        # if 'attention_length' in rnn_config.keys():
+                        #     layered_cell = tf.contrib.rnn.AttentionCellWrapper(cell=layered_cell, attn_length=rnn_config['attention_length'])
                         layered_cell = tf.contrib.rnn.DropoutWrapper(layered_cell,
                                                                      input_keep_prob=self.dropout_keep_prob,
                                                                      output_keep_prob=self.dropout_keep_prob,
@@ -106,8 +107,6 @@ class DRL_Portfolio(object):
                         if not v['keep_output']:
                             with tf.variable_scope(k + '/feature_map', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
                                 feature_rnn_cell = self._add_letm_cell(self.real_asset_number, activation=tf.nn.tanh)
-                                if 'attention_length' in rnn_config.keys():
-                                    feature_rnn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=feature_rnn_cell, attn_length=rnn_config['attention_length'])
                                 feature_rnn_cell = tf.contrib.rnn.DropoutWrapper(feature_rnn_cell,
                                                                                  input_keep_prob=self.dropout_keep_prob,
                                                                                  output_keep_prob=self.dropout_keep_prob,
@@ -117,9 +116,7 @@ class DRL_Portfolio(object):
                                 tf.summary.histogram(k + '/feature_rnn_output', feature_output)
                                 feature_output = tf.unstack(feature_output, axis=0)
                             with tf.variable_scope(k + '/cash'):
-                                cash_rnn_cell = self._add_letm_cell(1, activation=tf.nn.sigmoid)
-                                if 'attention_length' in rnn_config.keys():
-                                    cash_rnn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=cash_rnn_cell, attn_length=rnn_config['attention_length'])
+                                cash_rnn_cell = self._add_letm_cell(1, activation=tf.nn.tanh)
                                 cash_rnn_cell = tf.contrib.rnn.DropoutWrapper(cash_rnn_cell,
                                                                               input_keep_prob=self.dropout_keep_prob,
                                                                               output_keep_prob=self.dropout_keep_prob,
@@ -163,10 +160,11 @@ class DRL_Portfolio(object):
             initial_action = tf.random_uniform(shape=[1, self.real_asset_number])
             self.action = tf.concat([initial_action, self.action], axis=0)
             action_direction = tf.sign(self.action)
-            self.action = tf.nn.softmax(self.action)
+            self.action = tf.nn.softmax(tf.abs(self.action))
             self.action = action_direction*self.action
         with tf.variable_scope('reward'):
             self.z=tf.log(self.z)
+            tf.summary.histogram('log_market_return',self.z)
             self.log_reward_t = tf.reduce_sum(self.z * self.action[:-1] - self.c * tf.abs(self.action[1:] - self.action[:-1]), axis=1)
             self.cum_log_reward = tf.reduce_sum(self.log_reward_t)
             self.cum_reward = self.cum_log_reward
@@ -185,8 +183,8 @@ class DRL_Portfolio(object):
             else:
                 self.train_op = optimizer.minimize(-self.sortino)
         
-        for var in tf.trainable_variables():
-            tf.summary.histogram(var.op.name, var)
+        # for var in tf.trainable_variables():
+        #     tf.summary.histogram(var.op.name, var)
         self.session = tf.Session()
         self.saver = tf.train.Saver()
         self.init_op = tf.global_variables_initializer()
@@ -261,5 +259,5 @@ class DRL_Portfolio(object):
         self.saver.save(self.session, model_file)
     
     def trade(self, feed):
-        rewards, cum_log_reward, cum_reward, actions = self.session.run([self.reward_t, self.cum_log_reward, self.cum_reward, self.action], feed_dict=feed)
+        rewards, cum_log_reward, cum_reward, actions = self.session.run([self.log_reward_t, self.cum_log_reward, self.cum_reward, self.action], feed_dict=feed)
         return rewards, cum_log_reward, cum_reward, actions
