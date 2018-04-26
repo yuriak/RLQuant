@@ -152,16 +152,19 @@ class AgentTrader(TradingAlgorithm):
         # Execute Orders
         rewards, cum_log_reward, cum_reward, actions = self.model.trade(feed)
         today_action = np.nan_to_num(actions[-1].flatten())
-        for k, asset in enumerate(self.assets):
-            order_target_percent(asset, today_action[k])
+        if self.day % self.training_strategy['execute_interval'] == 0:
+            for k, asset in enumerate(self.assets):
+                order_target_percent(asset, today_action[k])
         self.real_return.append((self.portfolio.returns - self.real_return[-1]))
         self.history_weight.append(today_action)
         self.backtest_action_record.append(today_action)
-        holding_securities = dict(filter(lambda x: x[1] > 0.05 or x[1] < -0.05, list(zip(self.assets, today_action))))
+        holding_securities = dict(filter(lambda x: x[1] > 0.02 or x[1] < -0.02, list(zip(self.assets, today_action))))
         if self.day % self.log_interval == 0:
             record(invest_weight=np.sum(np.abs(today_action[:-1])))
             record(predict_reward=cum_reward.ravel()[0])
             record(large_holding=len(holding_securities))
+            record(long_order_number=np.sum(today_action[:-1] > 0))
+            record(short_order_number=np.sum(today_action[:-1] < 0))
             model_summary = self.model.get_summary(feed)
             self.tensorboard.log_algo(self, model_summaries=model_summary, epoch=self.day)
         print('actual return', self.portfolio.returns + 1, 'expect return:', cum_reward, 'on', str(trading_date))
@@ -174,11 +177,9 @@ class AgentTrader(TradingAlgorithm):
             training_strategy = self.training_strategy['long_term']
             if self.day % training_strategy['interval'] == 0:
                 feed = self.model.change_drop_keep_prob(feed, training_strategy['keep_prob'])
-                rewards, cum_log_reward, cum_reward, actions = self.model.trade(feed)
                 epoch = 0
                 while epoch < training_strategy['max_epoch']:
                     self.model.train(feed)
-                    rewards, cum_log_reward, cum_reward, actions = self.model.trade(feed)
                     epoch += 1
         self.day += 1
     
