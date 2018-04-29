@@ -69,6 +69,7 @@ network_topology = {
             'act': [tf.nn.relu, tf.nn.relu, tf.nn.tanh],
             'attention_length': 10
         },
+        'normalize': True,
         'keep_output': True
     },
     'spy_network': {
@@ -84,6 +85,7 @@ network_topology = {
             'act': [tf.nn.relu] * 3,
             'attention_length': 10
         },
+        'normalize': True,
         'keep_output': False
     },
     'vix_network': {
@@ -99,6 +101,7 @@ network_topology = {
             'act': [tf.nn.relu] * 3,
             'attention_length': 10
         },
+        'normalize': True,
         'keep_output': False
     },
     'gc_network': {
@@ -114,6 +117,7 @@ network_topology = {
             'act': [tf.nn.relu] * 3,
             'attention_length': 10
         },
+        'normalize': True,
         'keep_output': False
     },
     'si_network': {
@@ -129,6 +133,7 @@ network_topology = {
             'act': [tf.nn.relu] * 3,
             'attention_length': 10
         },
+        'normalize': True,
         'keep_output': False
     },
     'weight_network': {
@@ -144,6 +149,7 @@ network_topology = {
             'act': [tf.nn.relu, tf.nn.relu],
             'attention_length': 10
         },
+        'normalize': False,
         'keep_output': False
     },
     'return_network': {
@@ -159,6 +165,7 @@ network_topology = {
             'act': [tf.nn.relu, tf.nn.relu],
             'attention_length': 10
         },
+        'normalize': False,
         'keep_output': False
     },
     'news_network': {
@@ -174,6 +181,7 @@ network_topology = {
             'act': [tf.nn.relu, tf.nn.relu],
             'attention_length': 10
         },
+        'normalize': False,
         'keep_output': False
     }
 }
@@ -181,23 +189,18 @@ network_topology = {
 other_features = {
     'news_network': {
         'data': news_data,
-        'normalize': False
     },
     'spy_network': {
         'data': spy_data,
-        'normalize': True
     },
     'vix_network': {
         'data': vix_data,
-        'normalize': True
     },
     'gc_network': {
         'data': gc_data,
-        'normalize': True
     },
     'si_network': {
         'data': si_data,
-        'normalize': True
     }
 }
 

@@ -107,24 +107,22 @@ class AgentTrader(TradingAlgorithm):
         assert portfolio_weight_features.shape[2] == len(self.assets)
         
         return_rate = equity_features[:, :, 'return_rate'].join(pd.Series(np.ones(equity_features.shape[1]) * 1.001, index=equity_features.major_axis, name='CASH'))
-        equity_features = equity_features.apply(func=normalize_all, axis='major_axis').fillna(method='ffill').fillna(method='bfill').fillna(0)
+        equity_features = equity_features.replace(-np.inf, np.nan).replace(np.inf, np.nan).fillna(method='ffill').fillna(method='bfill').fillna(0)
         assert np.sum(np.isnan(equity_features.values)) == 0
         assert np.sum(np.isnan(portfolio_weight_features)) == 0
         assert np.sum(np.isnan(return_features)) == 0
         assert np.sum(np.isnan(return_rate.values)) == 0
         assert np.sum(return_rate.values <= 0) == 0
-        input_data = {'equity_network': equity_features.fillna(0).values, 'weight_network': portfolio_weight_features, 'return_network': return_features}
+        input_data = {'equity_network': equity_features.values, 'weight_network': portfolio_weight_features, 'return_network': return_features}
         for k, v in self.other_training_data.items():
             other_feature = v['data']
             if len(other_feature.shape) > 2:
                 other_feature = other_feature[:, equity_features.major_axis, :].fillna(0)
-                if v['normalize']:
-                    other_feature = other_feature.apply(func=normalize_all, axis='major_axis').fillna(method='ffill').fillna(method='bfill').fillna(0)
+                other_feature = other_feature.replace(-np.inf,np.nan).replace(np.inf, np.nan).fillna(method='ffill').fillna(method='bfill').fillna(0)
                 other_feature = other_feature.values
             else:
                 other_feature = other_feature.loc[equity_features.major_axis].fillna(0)
-                if v['normalize']:
-                    other_feature = normalize_all(other_feature).fillna(method='ffill').fillna(method='bfill').fillna(0)
+                other_feature.replace(-np.inf, np.nan).replace(np.inf, np.nan).fillna(method='ffill').fillna(method='bfill').fillna(0)
                 other_feature = np.expand_dims(other_feature.values, axis=0)
             assert equity_features.shape[1] == other_feature.shape[1]
             assert np.sum(np.isnan(other_feature)) == 0
@@ -157,6 +155,7 @@ class AgentTrader(TradingAlgorithm):
                 order_target_percent(asset, today_action[k])
         current_portfolio_value = self.portfolio.portfolio_value
         real_portfolio_weight = list(map(lambda x: self.portfolio.positions[x].amount * self.portfolio.positions[x].last_sale_price / current_portfolio_value, self.assets))
+        real_portfolio_weight = np.array(real_portfolio_weight)
         self.real_return.append((self.portfolio.returns - self.real_return[-1]))
         self.history_weight.append(real_portfolio_weight)
         self.backtest_action_record.append(today_action)
