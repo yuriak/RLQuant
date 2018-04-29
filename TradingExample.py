@@ -133,14 +133,14 @@ network_topology = {
     },
     'weight_network': {
         'feature_map_number': 1,
-        'feature_number': len(assets) + 1,
+        'feature_number': len(assets),
         'input_name': 'weight',
         'dense': {
-            'n_units': [(len(assets) + 1)] * 5,
+            'n_units': [(len(assets))] * 5,
             'act': [tf.nn.relu] * 5,
         },
         'rnn': {
-            'n_units': [(len(assets) + 1), 64],
+            'n_units': [(len(assets)), 64],
             'act': [tf.nn.relu, tf.nn.relu],
             'attention_length': 10
         },

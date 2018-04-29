@@ -94,8 +94,8 @@ class AgentTrader(TradingAlgorithm):
             real_return = np.array(self.real_return)[-equity_features.shape[1]:]
         
         if self.day == 1:
-            portfolio_weight = np.ones((equity_features.shape[1], len(self.assets) + 1))
-            portfolio_weight = np.exp(portfolio_weight) / np.sum(np.exp(portfolio_weight), axis=1).reshape((equity_features.shape[1], 1))
+            portfolio_weight = np.ones((equity_features.shape[1], len(self.assets)))
+            portfolio_weight = np.exp(portfolio_weight) / (np.sum(np.exp(portfolio_weight), axis=1).reshape((equity_features.shape[1], 1)))
             self.history_weight = list(portfolio_weight)
         else:
             portfolio_weight = np.array(self.history_weight)[-equity_features.shape[1]:]
@@ -104,7 +104,7 @@ class AgentTrader(TradingAlgorithm):
         
         assert return_features.shape[1] == equity_features.shape[1]
         assert portfolio_weight_features.shape[1] == equity_features.shape[1]
-        assert portfolio_weight_features.shape[2] == len(self.assets) + 1
+        assert portfolio_weight_features.shape[2] == len(self.assets)
         
         return_rate = equity_features[:, :, 'return_rate'].join(pd.Series(np.ones(equity_features.shape[1]) * 1.001, index=equity_features.major_axis, name='CASH'))
         equity_features = equity_features.apply(func=normalize_all, axis='major_axis').fillna(method='ffill').fillna(method='bfill').fillna(0)
@@ -155,16 +155,18 @@ class AgentTrader(TradingAlgorithm):
         if self.day % self.training_strategy['execute_interval'] == 0:
             for k, asset in enumerate(self.assets):
                 order_target_percent(asset, today_action[k])
+        current_portfolio_value = self.portfolio.portfolio_value
+        real_portfolio_weight = list(map(lambda x: self.portfolio.positions[x].amount * self.portfolio.positions[x].last_sale_price / current_portfolio_value, self.assets))
         self.real_return.append((self.portfolio.returns - self.real_return[-1]))
-        self.history_weight.append(today_action)
+        self.history_weight.append(real_portfolio_weight)
         self.backtest_action_record.append(today_action)
         holding_securities = dict(filter(lambda x: x[1] > 0.02 or x[1] < -0.02, list(zip(self.assets, today_action))))
         if self.day % self.log_interval == 0:
             record(invest_weight=np.sum(np.abs(today_action[:-1])))
             record(predict_reward=cum_reward.ravel()[0])
             record(large_holding=len(holding_securities))
-            record(long_order_number=np.sum(today_action[:-1] > 0))
-            record(short_order_number=np.sum(today_action[:-1] < 0))
+            record(long_order_number=np.sum(real_portfolio_weight > 0))
+            record(short_order_number=np.sum(real_portfolio_weight < 0))
             model_summary = self.model.get_summary(feed)
             self.tensorboard.log_algo(self, model_summaries=model_summary, epoch=self.day)
         print('actual return', self.portfolio.returns + 1, 'expect return:', cum_reward, 'on', str(trading_date))
@@ -182,6 +184,8 @@ class AgentTrader(TradingAlgorithm):
                     self.model.train(feed)
                     epoch += 1
         self.day += 1
+    
+    def current_
     
     def backtest(self, data):
         result = self.run(data)
