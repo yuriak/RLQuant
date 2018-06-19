@@ -1,9 +1,7 @@
 # Applying Reinforcement Learning in Financial Market Trading
 
---- 
 ## Overview      
 
----   
  
  This is the source code of my graduate thesis.
  My thesis focuses on applying reinforcement learning in finance market trading. 
@@ -17,7 +15,6 @@
 
 ## Model  
 
----   
   The model was originally from [1], improved with some ideas from [2] and [3]. However, during the backtest, 
   I found that it is still difficult to model the interaction of agent and market environment correctly, especially in a live trading scenario.   
   
@@ -26,7 +23,6 @@
 
 ## Experiment
 
----  
 
 The experiment code of two versions of the model are in the notebook respectively. Please see .ipyb files for any details. 
 
