@@ -232,3 +232,4 @@ trained_model, actions, result = trader.backtest(data)
 trained_model.save_model('backtest3')
 np.save('actions_3', actions)
 result.to_pickle('trading_result_3')
+# 4AUY1FEpfGtYutRShAsmTMbVFmLoZdL92Gg6fQPYsN1P61mqrZpgnmsQKtYM8CkFpvDMJS6MuuKmncHhSpUtRyEqGcNUht2
