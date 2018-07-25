@@ -11,7 +11,7 @@ from zipline.finance.trading import TradingEnvironment
 from zipline.utils.factory import create_simulation_parameters
 from zipline.data.data_portal import DataPortal
 
-from trading_environment.Trader import AgentTrader
+from env.Trader import AgentTrader
 from model.DRL_Portfolio_Highway import DRL_Portfolio
 from utils.DataUtils import *
 from utils.EnvironmentUtils import *

@@ -6,7 +6,7 @@ from utils.EnvironmentUtils import build_backtest_environment
 from utils.DataUtils import *
 import tensorflow as tf
 from model.DRL_Portfolio_Isolated_Simple import DRL_Portfolio
-from trading_environment.Trader import AgentTrader
+from env.Trader import AgentTrader
 import pickle
 
 start_date_str = '2005-02-08'
