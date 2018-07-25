@@ -184,7 +184,6 @@ class AgentTrader(TradingAlgorithm):
                     epoch += 1
         self.day += 1
     
-    def current_
     
     def backtest(self, data):
         result = self.run(data)
