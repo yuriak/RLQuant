@@ -6,7 +6,7 @@ import numpy as np
 import os
 
 
-class Environment(object):
+class StockEnv(object):
     def __init__(self, instruments,
                  api_key,
                  capital_base=1e5,
@@ -121,7 +121,7 @@ class Environment(object):
             print('market data exist, loading')
             market_data = pd.read_pickle(data_path).fillna(method='ffill').fillna(method='bfill')
         if pre_process:
-            processed_market_data, cleaned_market_data = Environment._pre_process(market_data, open_c='adj_open', close_c='adj_close', high_c='adj_high', low_c='adj_low', volume_c='adj_volume')
+            processed_market_data, cleaned_market_data = StockEnv._pre_process(market_data, open_c='adj_open', close_c='adj_close', high_c='adj_high', low_c='adj_low', volume_c='adj_volume')
         assert np.sum(np.isnan(processed_market_data.values)) == 0
         assert np.sum(np.isnan(cleaned_market_data.values)) == 0
         return processed_market_data, cleaned_market_data
@@ -141,7 +141,7 @@ class Environment(object):
             security = market_data[c, :, columns].fillna(method='ffill').fillna(method='bfill')
             security[volume_c] = security[volume_c].replace(0, np.nan).fillna(method='ffill')
             cleaned_data[c] = security.copy()
-            tech_data = Environment._get_indicators(security=security.astype(float), open_name=open_c, close_name=close_c, high_name=high_c, low_name=low_c, volume_name=volume_c)
+            tech_data = StockEnv._get_indicators(security=security.astype(float), open_name=open_c, close_name=close_c, high_name=high_c, low_name=low_c, volume_name=volume_c)
             preprocessed_data[c] = tech_data
         preprocessed_data = pd.Panel(preprocessed_data).dropna()
         cleaned_data = pd.Panel(cleaned_data)[:, preprocessed_data.major_axis, :].dropna()
