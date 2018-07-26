@@ -112,12 +112,14 @@ class CryptoCurrencyEnv(object):
     
     def _init_market_data(self, data_name='crc_market_data.pkl', re_download=False):
         data_path = self.data_local_path + '/' + data_name
+        if not os.path.exists(self.data_local_path):
+            os.mkdir(self.data_local_path)
         if not os.path.exists(data_path) or re_download:
             print('Start to download crc market data')
             market_data = CryptoCurrencyEnv.klines(instruments=self.instruments,
                                                    base_currency=self.base_currency,
                                                    interval=self.data_interval)
-            market_data = CryptoCurrencyEnv._pre_process(market_data)
+            market_data = CryptoCurrencyEnv._pre_process(market_data, open_c='open', high_c='high', low_c='low', close_c='close', volume_c='vol')
             market_data.to_pickle(data_path)
             print('Done')
         else:
@@ -133,7 +135,7 @@ class CryptoCurrencyEnv(object):
     
     @staticmethod
     def _pre_process(market_data, open_c, high_c, low_c, close_c, volume_c):
-        market_data = lmap(lambda x: (x[0], CryptoCurrencyEnv._get_indicators(x[1], close_name='close', high_name='high', low_name='low', open_name='open', volume_name='vol')), market_data)
+        market_data = lmap(lambda x: (x[0], CryptoCurrencyEnv._get_indicators(x[1], close_name=close_c, high_name=high_c, low_name=low_c, open_name=open_c, volume_name=volume_c)), market_data)
         market_data = OrderedDict(market_data)
         market_data = pd.Panel(market_data)
         return market_data
