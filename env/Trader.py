@@ -135,10 +135,10 @@ class AgentTrader(TradingAlgorithm):
                                           keep_prob=1.0,
                                           tao=self.training_strategy['tao'])
         
-        # self.model.train(feed)
+        # self.model_archive.train(feed)
         # if self.day >30:
         # =====================================================================================
-        # Conduct shor term training, for example, daily update model
+        # Conduct shor term training, for example, daily update model_archive
         if 'short_term' in self.training_strategy.keys():
             training_strategy = self.training_strategy['short_term']
             if self.day % training_strategy['interval'] == 0:
@@ -173,7 +173,7 @@ class AgentTrader(TradingAlgorithm):
         print('=' * 100)
         
         # =======================================================================================
-        # Conduct long term training, for example, monthly update model
+        # Conduct long term training, for example, monthly update model_archive
         if 'long_term' in self.training_strategy.keys():
             training_strategy = self.training_strategy['long_term']
             if self.day % training_strategy['interval'] == 0:

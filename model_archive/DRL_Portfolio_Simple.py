@@ -4,7 +4,7 @@ import numpy as np
 import os
 import tflearn as tl
 
-# This model was inspired by
+# This model_archive was inspired by
 # Deep Direct Reinforcement Learning for Financial Signal Representation and Trading
 
 '''
@@ -87,43 +87,51 @@ class DRL_Portfolio(object):
                 else:
                     output = X
                 tf.summary.histogram(k + '/input', output)
+                if 'dense' in v:
+                    with tf.variable_scope(k + '/dense', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
+                        dense_config = v['dense']
+                        for n, a in zip(dense_config['n_units'], dense_config['act']):
+                            output = self._add_dense_layer(output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
+                        tf.summary.histogram(k + '/dense_output', output)
                 if 'rnn' in v:
                     with tf.variable_scope(k + '/rnn', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
                         rnn_config = v['rnn']
-                        rnn_cells = [self._add_highway_lstm_cell(v['feature_map_number'] * v['feature_number'], rnn_config['act'][0]) for _ in range(len(rnn_config['n_units']))]
+                        rnn_cells = [self._add_letm_cell(i, a) for i, a in list(zip(rnn_config['n_units'], rnn_config['act']))]
                         layered_cell = tf.contrib.rnn.MultiRNNCell(rnn_cells)
+                        
+                        layered_cell = tf.contrib.rnn.DropoutWrapper(layered_cell,
+                                                                     input_keep_prob=self.dropout_keep_prob,
+                                                                     output_keep_prob=self.dropout_keep_prob,
+                                                                     state_keep_prob=self.dropout_keep_prob,
+                                                                     )
                         output, state = tf.nn.dynamic_rnn(cell=layered_cell, inputs=output, dtype=tf.float32)
-                        tf.summary.histogram(k + '/highway_rnn_output', output)
+                        tf.summary.histogram(k + '/first_rnn_output', output)
                         if not v['keep_output']:
                             with tf.variable_scope(k + '/feature_map', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
-                                feature_output = output
-                                if 'dense' in v:
-                                    dense_config = v['dense']
-                                    for n, a in zip(dense_config['n_units'], dense_config['act']):
-                                        feature_output = self._add_dense_layer(feature_output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
-                                feature_output = self._add_dense_layer(feature_output, output_shape=self.real_asset_number, drop_keep_prob=self.dropout_keep_prob, act=tf.nn.tanh)
+                                feature_rnn_cell = self._add_letm_cell(self.real_asset_number, activation=tf.nn.tanh)
+                                feature_rnn_cell = tf.contrib.rnn.DropoutWrapper(feature_rnn_cell,
+                                                                                 input_keep_prob=self.dropout_keep_prob,
+                                                                                 output_keep_prob=self.dropout_keep_prob,
+                                                                                 state_keep_prob=self.dropout_keep_prob,
+                                                                                 )
+                                feature_output, feature_state = tf.nn.dynamic_rnn(cell=feature_rnn_cell, inputs=output, dtype=tf.float32)
                                 tf.summary.histogram(k + '/feature_rnn_output', feature_output)
                                 feature_output = tf.unstack(feature_output, axis=0)[0]
                             with tf.variable_scope(k + '/cash'):
-                                cash_output = output
-                                if 'dense' in v:
-                                    dense_config = v['dense']
-                                    for n, a in zip(dense_config['n_units'], dense_config['act']):
-                                        cash_output = self._add_dense_layer(cash_output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
-                                cash_output = self._add_dense_layer(cash_output, output_shape=self.real_asset_number, drop_keep_prob=self.dropout_keep_prob, act=tf.nn.tanh)
+                                cash_rnn_cell = self._add_letm_cell(1, activation=tf.nn.tanh)
+                                cash_rnn_cell = tf.contrib.rnn.DropoutWrapper(cash_rnn_cell,
+                                                                              input_keep_prob=self.dropout_keep_prob,
+                                                                              output_keep_prob=self.dropout_keep_prob,
+                                                                              state_keep_prob=self.dropout_keep_prob,
+                                                                              )
+                                cash_output, cash_state = tf.nn.dynamic_rnn(cell=cash_rnn_cell, inputs=output, dtype=tf.float32)
                                 tf.summary.histogram(k + '/cash_rnn_output', cash_output)
                                 cash_output = tf.unstack(cash_output, axis=0)[0]
+                            
                             self.feature_outputs.append((feature_output, cash_output))
                         else:
-                            keep_output = output
-                            if 'dense' in v:
-                                dense_config = v['dense']
-                                for n, a in zip(dense_config['n_units'], dense_config['act']):
-                                    keep_output = self._add_dense_layer(keep_output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
-                            keep_output = self._add_dense_layer(keep_output, output_shape=self.real_asset_number - 1, drop_keep_prob=self.dropout_keep_prob, act=tf.nn.tanh)
-                            tf.summary.histogram(k + '/rnn_keep_output', keep_output)
-                            self.keep_output = tf.unstack(keep_output, axis=0)[0]
-        with tf.variable_scope('merge', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
+                            self.keep_output = tf.unstack(output, axis=0)[0]
+        with tf.name_scope('merge'):
             if len(self.feature_outputs) > 1:
                 feature_maps = list(map(lambda x: x[0], self.feature_outputs))
                 cash_maps = list(map(lambda x: x[1], self.feature_outputs))
@@ -203,24 +211,8 @@ class DRL_Portfolio(object):
     def _add_gru_cell(self, units_number, activation=tf.nn.relu):
         return tf.contrib.rnn.GRUCell(num_units=units_number, activation=activation)
     
-    def _add_highway_lstm_cell(self, units_number, activation=tf.nn.tanh):
-        lstm = tf.contrib.rnn.LSTMCell(activation=activation, num_units=units_number)
-        lstm = tf.contrib.rnn.HighwayWrapper(lstm)
-        lstm = tf.contrib.rnn.DropoutWrapper(lstm,
-                                             input_keep_prob=self.dropout_keep_prob,
-                                             output_keep_prob=self.dropout_keep_prob,
-                                             state_keep_prob=self.dropout_keep_prob,
-                                             )
-        return lstm
-    
-    def _add_lstm_cell(self, units_number, activation=tf.nn.tanh):
-        lstm = tf.contrib.rnn.LSTMCell(activation=activation, num_units=units_number)
-        lstm = tf.contrib.rnn.DropoutWrapper(lstm,
-                                             input_keep_prob=self.dropout_keep_prob,
-                                             output_keep_prob=self.dropout_keep_prob,
-                                             state_keep_prob=self.dropout_keep_prob,
-                                             )
-        return lstm
+    def _add_letm_cell(self, units_number, activation=tf.nn.tanh):
+        return tf.contrib.rnn.LSTMCell(activation=activation, num_units=units_number)
     
     def build_feed_dict(self, input_data, return_rate, keep_prob=0.8, fee=1e-3, tao=1):
         feed = {

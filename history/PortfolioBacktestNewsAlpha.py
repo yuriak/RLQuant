@@ -157,7 +157,7 @@ def before_trading_start(context, data):
             rewards, cum_log_reward, cum_reward, actions = context.model.trade(feed)
             training_time += 1
             if training_time % 10 == 0:
-                print('model trained ',training_time,'expect reward:', cum_reward, 'current index reward', index_current_return, 'target reward', target_return, 'on', str(trading_date))
+                print('model_archive trained ',training_time,'expect reward:', cum_reward, 'current index reward', index_current_return, 'target reward', target_return, 'on', str(trading_date))
     record(predict_reward=cum_reward.ravel()[0])
     record(spy=index_data['spy'][-1])
     record(spy_return=index_return['spy'].prod() - 1)

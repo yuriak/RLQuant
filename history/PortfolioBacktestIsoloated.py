@@ -336,7 +336,7 @@ def before_trading_start(context, data):
         rewards, cum_log_reward, cum_reward, actions = context.model.trade(feed)
         epoch = 0
         while cum_reward < 1.2 and epoch < 10:
-            # feed = context.model.change_drop_keep_prob(feed, 0.9)
+            # feed = context.model_archive.change_drop_keep_prob(feed, 0.9)
             context.model.train(feed=feed)
             rewards, cum_log_reward, cum_reward, actions = context.model.trade(feed)
             epoch += 1

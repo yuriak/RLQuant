@@ -80,8 +80,8 @@ def before_trading_start(context, data):
         model.train(feed=feed)
         rewards, cum_reward, actions, current_state, current_rnn_output=model.trade(feed)
     # while cum_reward < context.previous_predict_reward:
-    #     model.train(feed)
-    #     rewards, cum_reward, actions, current_state, current_rnn_output = model.trade(feed)
+    #     model_archive.train(feed)
+    #     rewards, cum_reward, actions, current_state, current_rnn_output = model_archive.trade(feed)
     #     print('traning: ', cum_reward)
     # context.previous_predict_reward=cum_reward
     context.today_action=actions[-1].ravel()[0]

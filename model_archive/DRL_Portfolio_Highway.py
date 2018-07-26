@@ -4,7 +4,7 @@ import numpy as np
 import os
 import tflearn as tl
 
-# This model was inspired by
+# This model_archive was inspired by
 # Deep Direct Reinforcement Learning for Financial Signal Representation and Trading
 
 '''
@@ -76,7 +76,6 @@ class DRL_Portfolio(object):
         self.model_inputs = {}
         self.feature_outputs = []
         self.keep_output = None
-        self.cash_map = None
         for k, v in feature_network_topology.items():
             with tf.variable_scope(k, initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
                 X = tf.placeholder(dtype=tf.float32, shape=[v['feature_map_number'], None, v['feature_number']], name=v['input_name'])
@@ -84,46 +83,38 @@ class DRL_Portfolio(object):
                 if v['feature_map_number'] > 1:
                     output = tf.unstack(X, axis=0)
                     output = tl.layers.merge(output, mode='concat')
-                    if v['normalize']:
-                        mean, var = tf.nn.moments(output, axes=[0])
-                        output = tf.nn.batch_normalization(output, mean=mean, variance=var, offset=None, scale=None, variance_epsilon=0.001)
                     output = tf.expand_dims(output, axis=0)
                 else:
                     output = X
-                # output = tl.layers.normalization.batch_normalization(output)
-                # mean, var = tf.nn.moments(output, axes=[0])
-                
                 tf.summary.histogram(k + '/input', output)
-                
                 if 'rnn' in v:
                     with tf.variable_scope(k + '/rnn', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
                         rnn_config = v['rnn']
-                        rnn_cells = [self._add_lstm_cell(i, a) for i, a in list(zip(rnn_config['n_units'], rnn_config['act']))]
+                        rnn_cells = [self._add_highway_lstm_cell(v['feature_map_number'] * v['feature_number'], rnn_config['act'][0]) for _ in range(len(rnn_config['n_units']))]
                         layered_cell = tf.contrib.rnn.MultiRNNCell(rnn_cells)
-                        # layered_cell = tf.contrib.rnn.HighwayWrapper(layered_cell)
                         output, state = tf.nn.dynamic_rnn(cell=layered_cell, inputs=output, dtype=tf.float32)
-                        tf.summary.histogram(k + '/first_rnn_output', output)
-                        # if not v['keep_output']:
-                        with tf.variable_scope(k + '/feature_map', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
-                            feature_output = output
-                            if 'dense' in v:
-                                dense_config = v['dense']
-                                for n, a in zip(dense_config['n_units'], dense_config['act']):
-                                    feature_output = self._add_dense_layer(feature_output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
-                            feature_output = self._add_dense_layer(feature_output, output_shape=self.real_asset_number - 1, drop_keep_prob=self.dropout_keep_prob, act=tf.nn.relu)
-                            tf.summary.histogram(k + '/feature_rnn_output', feature_output)
-                            feature_output = tf.unstack(feature_output, axis=0)[0]
-                        with tf.variable_scope(k + '/cash'):
-                            cash_output = output
-                            if 'dense' in v:
-                                dense_config = v['dense']
-                                for n, a in zip(dense_config['n_units'], dense_config['act']):
-                                    cash_output = self._add_dense_layer(cash_output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
-                            cash_output = self._add_dense_layer(cash_output, output_shape=self.real_asset_number - 1, drop_keep_prob=self.dropout_keep_prob, act=tf.nn.relu)
-                            tf.summary.histogram(k + '/cash_rnn_output', cash_output)
-                            cash_output = tf.unstack(cash_output, axis=0)[0]
-                        self.feature_outputs.append((feature_output, cash_output))
-                        if v['keep_output']:
+                        tf.summary.histogram(k + '/highway_rnn_output', output)
+                        if not v['keep_output']:
+                            with tf.variable_scope(k + '/feature_map', initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(0.1)):
+                                feature_output = output
+                                if 'dense' in v:
+                                    dense_config = v['dense']
+                                    for n, a in zip(dense_config['n_units'], dense_config['act']):
+                                        feature_output = self._add_dense_layer(feature_output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
+                                feature_output = self._add_dense_layer(feature_output, output_shape=self.real_asset_number, drop_keep_prob=self.dropout_keep_prob, act=tf.nn.tanh)
+                                tf.summary.histogram(k + '/feature_rnn_output', feature_output)
+                                feature_output = tf.unstack(feature_output, axis=0)[0]
+                            with tf.variable_scope(k + '/cash'):
+                                cash_output = output
+                                if 'dense' in v:
+                                    dense_config = v['dense']
+                                    for n, a in zip(dense_config['n_units'], dense_config['act']):
+                                        cash_output = self._add_dense_layer(cash_output, output_shape=n, drop_keep_prob=self.dropout_keep_prob, act=a)
+                                cash_output = self._add_dense_layer(cash_output, output_shape=self.real_asset_number, drop_keep_prob=self.dropout_keep_prob, act=tf.nn.tanh)
+                                tf.summary.histogram(k + '/cash_rnn_output', cash_output)
+                                cash_output = tf.unstack(cash_output, axis=0)[0]
+                            self.feature_outputs.append((feature_output, cash_output))
+                        else:
                             keep_output = output
                             if 'dense' in v:
                                 dense_config = v['dense']
@@ -138,30 +129,24 @@ class DRL_Portfolio(object):
                 cash_maps = list(map(lambda x: x[1], self.feature_outputs))
                 feature_maps = tl.layers.merge(feature_maps, mode='concat')
                 cash_maps = tl.layers.merge(cash_maps, mode='concat')
-                feature_maps = self._add_dense_layer(feature_maps, self.real_asset_number - 1, self.dropout_keep_prob)
-                cash_maps = self._add_dense_layer(cash_maps, 1, self.dropout_keep_prob, act=tf.nn.sigmoid) / 2.0
+                feature_maps = self._add_dense_layer(feature_maps, self.real_asset_number, self.dropout_keep_prob)
+                cash_maps = self._add_dense_layer(cash_maps, 1, self.dropout_keep_prob)
             else:
                 feature_maps = self.feature_outputs[0][0]
                 cash_maps = self.feature_outputs[0][1]
             tf.summary.histogram('feature_map', feature_maps)
             tf.summary.histogram('cash_map', cash_maps)
-            self.cash_map = cash_maps
-            # self.keep_output=(1-cash_maps)*self.keep_output
-            # self.keep_output = tl.layers.merge([self.keep_output, cash_maps], mode='concat')
+            self.keep_output = tl.layers.merge([self.keep_output, cash_maps], mode='concat')
             self.keep_output = tl.layers.merge([self.keep_output, feature_maps], mode='elemwise_sum')
             tf.summary.histogram('before_action_output', self.keep_output)
         with tf.variable_scope('action'):
             self.action = self.keep_output
             self.action = self.action / self.tao
-            initial_action = tf.random_uniform(shape=[1, self.real_asset_number - 1])
+            initial_action = tf.random_uniform(shape=[1, self.real_asset_number])
             self.action = tf.concat([initial_action, self.action], axis=0)
-            self.cash_map = tf.concat([[[0.0]], self.cash_map], axis=0)
             action_direction = tf.sign(self.action)
             self.action = tf.nn.softmax(tf.abs(self.action))
             self.action = action_direction * self.action
-            discounted_action = (1 - self.cash_map) * self.action
-            self.action = tl.layers.merge([discounted_action, self.cash_map], mode='concat')
-            # self.action = action_direction * self.action
         with tf.variable_scope('reward'):
             market_log_return = tf.log(self.z)
             tf.summary.histogram('log_market_return', market_log_return)
@@ -173,7 +158,7 @@ class DRL_Portfolio(object):
             self.sharpe = self._sharpe_ratio(self.log_reward_t, 0)
             tf.summary.histogram('action', self.action)
             tf.summary.histogram('reward_t', self.log_reward_t)
-            tf.summary.histogram('mean_log_reward', self.cum_log_reward)
+            tf.summary.histogram('mean_log_reward', self.mean_log_reward)
         with tf.variable_scope('train'):
             optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate)
             if object_function == 'reward':

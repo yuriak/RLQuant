@@ -5,7 +5,7 @@ import itertools
 from utils.EnvironmentUtils import build_backtest_environment
 from utils.DataUtils import *
 import tensorflow as tf
-from model.DRL_Portfolio_Isolated_Simple import DRL_Portfolio
+from model_archive.DRL_Portfolio_Isolated_Simple import DRL_Portfolio
 from env.Trader import AgentTrader
 import pickle
 
@@ -160,7 +160,7 @@ if not os.path.exists('./experiment'):
 
 for i, h in enumerate(hyper_parameters):
     result_dir = './experiment/result%d' % i
-    model_dir = result_dir + '/model'
+    model_dir = result_dir + '/model_archive'
     if not os.path.exists(result_dir):
         os.mkdir(result_dir)
     if not os.path.exists(model_dir):

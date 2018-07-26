@@ -12,7 +12,7 @@ from zipline.utils.factory import create_simulation_parameters
 from zipline.data.data_portal import DataPortal
 
 from env.Trader import AgentTrader
-from model.DRL_Portfolio_Isolated_Simple import DRL_Portfolio
+from model_archive.DRL_Portfolio_Isolated_Simple import DRL_Portfolio
 from utils.DataUtils import *
 from utils.EnvironmentUtils import *
 

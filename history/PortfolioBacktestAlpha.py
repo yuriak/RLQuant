@@ -160,13 +160,13 @@ def before_trading_start(context, data):
     real_multiplier = context.target_profit_multiplier * (1 + 0.001 * context.i)
     target_return = real_multiplier * index_current_return
     # for _ in range(2):
-    #     feed=context.model.change_drop_keep_prob(feed,0.7)
+    #     feed=context.model_archive.change_drop_keep_prob(feed,0.7)
     
     print('actual return', context.portfolio.returns + 1, 'expect reward:', cum_reward, 'current index reward', index_current_return, 'target reward', target_return, 'on', str(trading_date))
     # if context.i% context.model_update_time==0:
     #     for _ in range(2):
     #
-    #     rewards, cum_log_reward, cum_reward, actions = context.model.trade(feed)
+    #     rewards, cum_log_reward, cum_reward, actions = context.model_archive.trade(feed)
     record(predict_reward=cum_reward.ravel()[0])
     record(spy=index_data['spy'][-1])
     record(spy_return=index_return['spy'].prod() - 1)

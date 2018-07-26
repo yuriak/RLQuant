@@ -4,7 +4,7 @@ import numpy as np
 import os
 import tflearn as tl
 
-# This model was inspired by
+# This model_archive was inspired by
 # Deep Direct Reinforcement Learning for Financial Signal Representation and Trading
 
 '''
