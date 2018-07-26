@@ -24,7 +24,7 @@ class Actor(nn.Module):
         self.softmax = nn.Softmax()
         self.sigmoid = nn.Sigmoid()
         self.initial_hidden = torch.zeros(self.rnn_layers, self.b_dim, 128, dtype=torch.float32)
-    
+
     def forward(self, state, hidden=None, train=False):
         state, h = self.gru(state, hidden)
         if train:
@@ -48,23 +48,23 @@ class DRLAgent(Agent):
         self.pointer = 0
         self.s_buffer = []
         self.d_buffer = []
-        
+
         self.train_hidden = None
         self.trade_hidden = None
         self.actor = Actor(s_dim=self.s_dim, b_dim=self.b_dim, rnn_layers=rnn_layers)
         self.optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate)
-    
+
     def _trade(self, state, train=False):
         with torch.no_grad():
             a, self.trade_hidden = self.actor(state[:, None, :], self.trade_hidden, train=False)
         return a
-    
+
     def trade(self, state, train=False):
         state_ = torch.tensor(state)
         action = self._trade(state_, train=train)
-        return action.numpy()
-    
-    def _train(self):
+        return action.numpy().flatten()
+
+    def train(self):
         self.optimizer.zero_grad()
         s = torch.stack(self.s_buffer).t()
         d = torch.stack(self.d_buffer)
@@ -74,28 +74,28 @@ class DRLAgent(Agent):
         for param in self.actor.parameters():
             param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
-    
+
     def reset_model(self):
         self.s_buffer = []
         self.d_buffer = []
         self.trade_hidden = None
         self.train_hidden = None
         self.pointer = 0
-    
+
     def save_transition(self, state, diff):
         if self.pointer < self.batch_length:
-            self.s_buffer.append(state)
+            self.s_buffer.append(torch.tensor(state))
             self.d_buffer.append(torch.tensor(diff, dtype=torch.float32))
             self.pointer += 1
         else:
             self.s_buffer.pop(0)
             self.d_buffer.pop(0)
-            self.s_buffer.append(state)
+            self.s_buffer.append(torch.tensor(state))
             self.d_buffer.append(torch.tensor(diff, dtype=torch.float32))
-    
+
     def load_model(self, model_path='./DRL_Torch'):
         self.actor = torch.load(model_path + '/model.pkl')
-    
+
     def save_model(self, model_path='./DRL_Torch'):
         if not os.path.exists(model_path):
             os.mkdir(model_path)

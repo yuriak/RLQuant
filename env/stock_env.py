@@ -29,17 +29,17 @@ class StockEnv(object):
         self.preprocessed_market_data, self.cleaned_market_data = self._init_market_data(re_download=re_download)
         self.pointer = normalize_length - 1
         self.done = (self.pointer == (self.preprocessed_market_data.shape[1] - 1))
-        
+
         self.current_position = np.zeros(len(self.instruments))
         self.current_portfolio_value = np.concatenate((np.zeros(len(self.instruments)), [self.capital_base]))
         self.current_weight = np.concatenate((np.zeros(len(self.instruments)), [1.]))
         self.current_date = self.preprocessed_market_data.major_axis[self.pointer]
-        
+
         self.portfolio_values = []
         self.positions = []
         self.weights = []
         self.trade_dates = []
-    
+
     def reset(self):
         self.pointer = self.normalize_length
         self.current_position = np.zeros(len(self.instruments))
@@ -47,60 +47,62 @@ class StockEnv(object):
         self.current_weight = np.concatenate((np.zeros(len(self.instruments)), [1.]))
         self.current_date = self.preprocessed_market_data.major_axis[self.pointer]
         self.done = (self.pointer == (self.preprocessed_market_data.shape[1] - 1))
-        
+
         self.portfolio_values = []
         self.positions = []
         self.weights = []
         self.trade_dates = []
-        
+
         return self._get_normalized_state(), self.done
-    
+
     def step(self, action):
         assert action.shape[0] == len(self.instruments) + 1
         assert np.sum(action) <= 1 + 1e5
         current_price = self.cleaned_market_data[:, :, 'adj_close'].iloc[self.pointer].values
         self._rebalance(action=action, current_price=current_price)
-        
+
         self.pointer += 1
         self.done = (self.pointer == (self.preprocessed_market_data.shape[1] - 1))
         next_price = self.cleaned_market_data[:, :, 'adj_close'].iloc[self.pointer].values
         reward = self._get_reward(current_price=current_price, next_price=next_price)
         state = self._get_normalized_state()
         return state, reward, self.done
-    
+
     def _rebalance(self, action, current_price):
         target_weight = action
         target_value = np.sum(self.current_portfolio_value) * target_weight
         target_position = target_value[:-1] / current_price
         trade_amount = target_position - self.current_position
         commission_cost = np.sum(self.commission_fee * np.abs(trade_amount) * current_price)
-        
+
         self.current_position = target_position
         self.current_portfolio_value = target_value - commission_cost
         self.current_weight = target_weight
         self.current_date = self.preprocessed_market_data.major_axis[self.pointer]
-        
+
         self.positions.append(self.current_position.copy())
         self.weights.append(self.current_weight.copy())
         self.portfolio_values.append(self.current_portfolio_value.copy())
         self.trade_dates.append(self.current_date)
-    
+
     def _get_normalized_state(self):
         data = self.preprocessed_market_data.iloc[:, self.pointer + 1 - self.normalize_length:self.pointer + 1, :].values
         state = ((data - np.mean(data, axis=1, keepdims=True)) / (np.std(data, axis=1, keepdims=True) + 1e-5))[:, -1, :]
         return state
-    
+
     def get_meta_state(self):
         return self.preprocessed_market_data.iloc[:, self.pointer, :]
-    
+
     def _get_reward(self, current_price, next_price):
         return_rate = (next_price / current_price)
         log_return = np.log(return_rate)
+        last_weight = self.current_weight.copy()
         securities_value = self.current_portfolio_value[:-1] * return_rate
         self.current_portfolio_value[:-1] = securities_value
         self.current_weight = self.current_portfolio_value / np.sum(self.current_portfolio_value)
-        return log_return
-    
+        reward = last_weight[:-1] * log_return
+        return reward
+
     def _init_market_data(self, data_name='market_data.pkl', pre_process=True, re_download=False):
         data_path = self.data_local_path + '/' + data_name
         if not os.path.exists(data_path) or re_download:
@@ -125,13 +127,13 @@ class StockEnv(object):
         assert np.sum(np.isnan(processed_market_data.values)) == 0
         assert np.sum(np.isnan(cleaned_market_data.values)) == 0
         return processed_market_data, cleaned_market_data
-    
+
     def get_summary(self):
         portfolio_value_df = pd.DataFrame(np.array(self.portfolio_values), index=np.array(self.trade_dates), columns=self.instruments + ['cash'])
         positions_df = pd.DataFrame(np.array(self.positions), index=np.array(self.trade_dates), columns=self.instruments)
         weights_df = pd.DataFrame(np.array(self.weights), index=np.array(self.trade_dates), columns=self.instruments + ['cash'])
         return portfolio_value_df, positions_df, weights_df
-    
+
     @staticmethod
     def _pre_process(market_data, open_c, high_c, low_c, close_c, volume_c):
         preprocessed_data = {}
@@ -146,7 +148,7 @@ class StockEnv(object):
         preprocessed_data = pd.Panel(preprocessed_data).dropna()
         cleaned_data = pd.Panel(cleaned_data)[:, preprocessed_data.major_axis, :].dropna()
         return preprocessed_data, cleaned_data
-    
+
     @staticmethod
     def _get_indicators(security, open_name, close_name, high_name, low_name, volume_name):
         open_price = security[open_name].values
