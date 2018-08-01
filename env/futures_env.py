@@ -6,7 +6,7 @@ import numpy as np
 import os
 
 
-class StockEnv(object):
+class FuturesEnv(object):
     def __init__(self, instruments,
                  api_key,
                  capital_base=1e5,
@@ -58,12 +58,12 @@ class StockEnv(object):
     def step(self, action):
         assert action.shape[0] == len(self.instruments) + 1
         assert np.sum(action) <= 1 + 1e5
-        current_price = self.cleaned_market_data[:, :, 'adj_close'].iloc[self.pointer].values
+        current_price = self.cleaned_market_data[:, :, 'Last'].iloc[self.pointer].values
         self._rebalance(action=action, current_price=current_price)
         
         self.pointer += 1
         self.done = (self.pointer == (self.preprocessed_market_data.shape[1] - 1))
-        next_price = self.cleaned_market_data[:, :, 'adj_close'].iloc[self.pointer].values
+        next_price = self.cleaned_market_data[:, :, 'Last'].iloc[self.pointer].values
         reward = self._get_reward(current_price=current_price, next_price=next_price)
         state = self._get_normalized_state()
         return state, reward, self.done
@@ -103,27 +103,23 @@ class StockEnv(object):
         reward = last_weight[:-1] * log_return
         return reward
     
-    def _init_market_data(self, data_name='stock_market_data.pkl', pre_process=True, re_download=False):
+    def _init_market_data(self, data_name='futures_market_data.pkl', pre_process=True, re_download=False):
         data_path = self.data_local_path + '/' + data_name
+        futures = {}
         if not os.path.exists(data_path) or re_download:
             print('Start to download market data')
-            stocks = quandl.get_table('WIKI/PRICES', ticker=self.instruments,
-                                      qopts={'columns': ['ticker', 'date', 'adj_open', 'adj_close', 'adj_high', 'adj_low', 'adj_volume']},
-                                      date={'gte': None, 'lte': None}, paginate=True)
-            stock_groups = stocks.groupby('ticker')
-            stocks = {}
-            for k in stock_groups.groups.keys():
-                group = stock_groups.get_group(k)
-                group.index = group.date
-                stocks[k] = group[['adj_open', 'adj_close', 'adj_high', 'adj_low', 'adj_volume']]
-            market_data = pd.Panel(stocks).fillna(method='ffill').fillna(method='bfill')
+            for i in self.instruments:
+                future = quandl.get('CHRIS/{0}'.format(i), authtoken=self.api_key)
+                future = future[['Open', 'High', 'Low', 'Last', 'Volume']]
+                futures[i] = future
+            market_data = pd.Panel(futures).fillna(method='ffill').fillna(method='bfill')
             market_data.to_pickle(data_path)
             print('Done')
         else:
             print('market data exist, loading')
             market_data = pd.read_pickle(data_path).fillna(method='ffill').fillna(method='bfill')
         if pre_process:
-            processed_market_data, cleaned_market_data = self._pre_process(market_data, open_c='adj_open', close_c='adj_close', high_c='adj_high', low_c='adj_low', volume_c='adj_volume')
+            processed_market_data, cleaned_market_data = self._pre_process(market_data, open_c='Open', close_c='Last', high_c='High', low_c='Low', volume_c='Volume')
         assert np.sum(np.isnan(processed_market_data.values)) == 0
         assert np.sum(np.isnan(cleaned_market_data.values)) == 0
         return processed_market_data, cleaned_market_data
@@ -142,7 +138,7 @@ class StockEnv(object):
             security = market_data[c, :, columns].fillna(method='ffill').fillna(method='bfill')
             security[volume_c] = security[volume_c].replace(0, np.nan).fillna(method='ffill')
             cleaned_data[c] = security.copy()
-            tech_data = StockEnv._get_indicators(security=security.astype(float), open_name=open_c, close_name=close_c, high_name=high_c, low_name=low_c, volume_name=volume_c)
+            tech_data = FuturesEnv._get_indicators(security=security.astype(float), open_name=open_c, close_name=close_c, high_name=high_c, low_name=low_c, volume_name=volume_c)
             preprocessed_data[c] = tech_data
         preprocessed_data = pd.Panel(preprocessed_data).dropna()
         cleaned_data = pd.Panel(cleaned_data)[:, preprocessed_data.major_axis, :].dropna()
