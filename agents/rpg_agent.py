@@ -67,7 +67,7 @@ class RPGAgent(Agent):
             return a[:, 0, :].argmax(dim=1)
     
     def trade(self, state):
-        state_ = torch.tensor(state)
+        state_ = torch.tensor(state,dtype=torch.float32)
         action = self._trade(state_).numpy()
         return action
     
@@ -98,20 +98,20 @@ class RPGAgent(Agent):
     
     def save_transition(self, state, action, reward, next_state):
         if self.pointer < self.batch_length:
-            self.s_buffer.append(torch.tensor(state))
+            self.s_buffer.append(torch.tensor(state, dtype=torch.float32))
             self.a_buffer.append(torch.tensor(action))
             self.r_buffer.append(torch.tensor(reward[:, None], dtype=torch.float32))
-            self.s_next_buffer.append(torch.tensor(next_state))
+            self.s_next_buffer.append(torch.tensor(next_state, dtype=torch.float32))
             self.pointer += 1
         else:
             self.s_buffer.pop(0)
             self.a_buffer.pop(0)
             self.r_buffer.pop(0)
             self.s_next_buffer.pop(0)
-            self.s_buffer.append(torch.tensor(state))
+            self.s_buffer.append(torch.tensor(state, dtype=torch.float32))
             self.a_buffer.append(torch.tensor(action))
             self.r_buffer.append(torch.tensor(reward[:, None], dtype=torch.float32))
-            self.s_next_buffer.append(torch.tensor(next_state))
+            self.s_next_buffer.append(torch.tensor(next_state, dtype=torch.float32))
     
     def load_model(self, model_path='./RPG_Torch'):
         self.actor = torch.load(model_path + '/model.pkl')

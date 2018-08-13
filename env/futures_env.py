@@ -88,7 +88,7 @@ class FuturesEnv(object):
     def _get_normalized_state(self):
         data = self.preprocessed_market_data.iloc[:, self.pointer + 1 - self.normalize_length:self.pointer + 1, :].values
         state = ((data - np.mean(data, axis=1, keepdims=True)) / (np.std(data, axis=1, keepdims=True) + 1e-5))[:, -1, :]
-        return state
+        return np.concatenate((state, self.current_weight[:-1][:, None]), axis=1)
     
     def get_meta_state(self):
         return self.preprocessed_market_data.iloc[:, self.pointer, :]
