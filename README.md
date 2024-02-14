@@ -64,7 +64,7 @@ And, 2 types of agents:
 
 - **Simple Tear Sheet:** Provides an overview of the strategy's performance compared to a benchmark, a buy-and-hold strategy. It includes metrics such as cumulative returns, annualized return, Sharpe ratio, maximum drawdown, and various risk-adjusted performance measures.
     - Example Output: Cummulative Returns  
-    ![alt text](resources\CumRet.png)
+    ![alt text](resources/CumRet.png)
 
 - **Position Tear Sheet:** Provides insights into the strategy's position allocations over time. It shows the distribution of capital across different assets or instruments in the portfolio.
     - Example Output: Exposure  
